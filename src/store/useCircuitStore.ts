@@ -34,7 +34,13 @@ import {
   ProbeTarget,
   ScopeChannelConfig,
 } from '../types/instruments';
-import { computeWireFlowDirection, getRectifierDcReferenceOffset } from '../utils/circuitFlow';
+import {
+  computeWireFlowDirection,
+  getRectifierDcReferenceOffset,
+  resetCircuitFlowCache,
+} from '../utils/circuitFlow';
+import { resetWireFlowEngineState } from '../simulation/wireFlowEngine';
+import { stopAllSounds, syncCircuitSound } from '../utils/soundEngine';
 
 export interface ScopeSample {
   t: number;
@@ -44,82 +50,6 @@ export interface ScopeSample {
 export const scopeSampleBuffer: ScopeSample[] = [];
 export function clearScopeSampleBuffer() {
   scopeSampleBuffer.length = 0;
-}
-
-// WebAudio Synthesizer for 8Ω Dynamic Audio Speaker
-let speakerAudioCtx: AudioContext | null = null;
-const activeSpeakerNodes = new Map<string, { osc: OscillatorNode; gain: GainNode }>();
-
-function stopAllSpeakerAudio() {
-  for (const [, node] of activeSpeakerNodes.entries()) {
-    try {
-      node.osc.stop();
-      node.osc.disconnect();
-      node.gain.disconnect();
-    } catch {
-      // ignore
-    }
-  }
-  activeSpeakerNodes.clear();
-}
-
-function syncSpeakerWebAudio(comps: CircuitComponent[], isRunning: boolean) {
-  if (typeof window === 'undefined') return;
-  if (!isRunning) {
-    if (activeSpeakerNodes.size > 0) stopAllSpeakerAudio();
-    return;
-  }
-
-  const activeIds = new Set<string>();
-  for (const c of comps) {
-    if (c.type === 'builtin_speaker' && c.properties?.audioEnabled === true && c.state?.isSounding === true && !c.state?.isBurned) {
-      activeIds.add(c.id);
-      try {
-        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-        if (!AudioCtx) continue;
-        if (!speakerAudioCtx) {
-          speakerAudioCtx = new AudioCtx();
-        }
-        if (speakerAudioCtx.state === 'suspended') {
-          speakerAudioCtx.resume().catch(() => {});
-        }
-        const baseFreq = typeof c.properties?.toneFrequency === 'number' ? c.properties.toneFrequency : 440;
-        const vDrop = Math.abs(c.state?.voltageDropV ?? 5.0);
-        const freq = Math.max(80, Math.min(4000, baseFreq + (vDrop - 5.0) * 35));
-
-        let entry = activeSpeakerNodes.get(c.id);
-        if (!entry) {
-          const osc = speakerAudioCtx.createOscillator();
-          const gain = speakerAudioCtx.createGain();
-          osc.type = 'triangle';
-          osc.frequency.setValueAtTime(freq, speakerAudioCtx.currentTime);
-          gain.gain.setValueAtTime(0.06, speakerAudioCtx.currentTime);
-          osc.connect(gain);
-          gain.connect(speakerAudioCtx.destination);
-          osc.start();
-          entry = { osc, gain };
-          activeSpeakerNodes.set(c.id, entry);
-        } else {
-          entry.osc.frequency.setTargetAtTime(freq, speakerAudioCtx.currentTime, 0.02);
-        }
-      } catch {
-        // ignore audio errors if autoplay blocked
-      }
-    }
-  }
-
-  for (const [id, node] of activeSpeakerNodes.entries()) {
-    if (!activeIds.has(id)) {
-      try {
-        node.osc.stop();
-        node.osc.disconnect();
-        node.gain.disconnect();
-      } catch {
-        // ignore
-      }
-      activeSpeakerNodes.delete(id);
-    }
-  }
 }
 
 interface HistorySnapshot {
@@ -151,6 +81,11 @@ interface CircuitStoreState {
   theme: 'dark' | 'light';
   setTheme: (theme: 'dark' | 'light') => void;
   toggleTheme: () => void;
+
+  // Audio / Sound
+  isSoundEnabled: boolean;
+  setSoundEnabled: (enabled: boolean) => void;
+  toggleSound: () => void;
 
   // Viewport
   viewport: ViewportTransform;
@@ -235,6 +170,7 @@ interface CircuitStoreState {
   addComponent: (type: string, x?: number, y?: number) => string;
   removeComponent: (id: string) => void;
   addTextBox: (x?: number, y?: number) => string;
+  addShape: (shapeType?: string, x?: number, y?: number) => string;
   updateComponentPos: (id: string, x: number, y: number) => void;
   moveComponent: (id: string, x: number, y: number) => void;
   commitComponentMove: (preDragSnapshot?: { components: CircuitComponent[]; wires: CircuitWire[] }) => void;
@@ -340,10 +276,19 @@ interface CircuitStoreState {
 
 function getInitialTheme(): 'dark' | 'light' {
   if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
-    const saved = localStorage.getItem('secs_theme');
+    const saved = localStorage.getItem('secs_theme') || localStorage.getItem('theme');
     if (saved === 'light' || saved === 'dark') return saved;
   }
   return 'dark';
+}
+
+function getInitialSoundEnabled(): boolean {
+  if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+    const saved = localStorage.getItem('secs_sound_enabled');
+    if (saved === 'false' || saved === '0') return false;
+    if (saved === 'true' || saved === '1') return true;
+  }
+  return true;
 }
 
 function saveHistorySnapshot(
@@ -394,6 +339,7 @@ let lastAddComponentCall: { type: string; x?: number; y?: number; timestamp: num
 
 export const useCircuitStore = create<CircuitStoreState>((set, get) => {
   const initialTheme = getInitialTheme();
+  const initialSoundEnabled = getInitialSoundEnabled();
   if (typeof document !== 'undefined') {
     if (initialTheme === 'dark') {
       document.documentElement.classList.add('dark');
@@ -406,7 +352,10 @@ export const useCircuitStore = create<CircuitStoreState>((set, get) => {
     // Navigation View
     currentView: 'dashboard',
     setView: (view) => set({ currentView: view }),
-    openDashboard: () => set({ currentView: 'dashboard' }),
+    openDashboard: () => {
+      stopAllSounds();
+      set({ currentView: 'dashboard' });
+    },
     openEditor: () => set({ currentView: 'editor' }),
 
     // Project Metadata & Real-time Auto-Save
@@ -475,6 +424,7 @@ export const useCircuitStore = create<CircuitStoreState>((set, get) => {
     setTheme: (theme) => {
       if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
         localStorage.setItem('secs_theme', theme);
+        localStorage.setItem('theme', theme);
       }
       if (typeof document !== 'undefined') {
         if (theme === 'dark') {
@@ -488,6 +438,20 @@ export const useCircuitStore = create<CircuitStoreState>((set, get) => {
     toggleTheme: () => {
       const next = get().theme === 'dark' ? 'light' : 'dark';
       get().setTheme(next);
+    },
+
+    // Audio / Sound
+    isSoundEnabled: initialSoundEnabled,
+    setSoundEnabled: (enabled) => {
+      if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+        localStorage.setItem('secs_sound_enabled', enabled ? 'true' : 'false');
+      }
+      set({ isSoundEnabled: enabled });
+      syncCircuitSound(get().components, get().simulationStatus === 'running', enabled);
+    },
+    toggleSound: () => {
+      const next = !get().isSoundEnabled;
+      get().setSoundEnabled(next);
     },
 
     // Viewport
@@ -763,6 +727,29 @@ export const useCircuitStore = create<CircuitStoreState>((set, get) => {
       const targetX = x !== undefined ? x : snapToGrid(-viewport.panX / viewport.zoom + 200);
       const targetY = y !== undefined ? y : snapToGrid(-viewport.panY / viewport.zoom + 160);
       return get().addComponent('textbox', targetX, targetY);
+    },
+
+    addShape: (shapeType = 'rectangle', x, y) => {
+      const { viewport } = get();
+      const targetX = x !== undefined ? x : snapToGrid(-viewport.panX / viewport.zoom + 220);
+      const targetY = y !== undefined ? y : snapToGrid(-viewport.panY / viewport.zoom + 180);
+      const id = get().addComponent('shape', targetX, targetY);
+      if (id && shapeType) {
+        set((state) => ({
+          components: state.components.map((c) =>
+            c.id === id
+              ? {
+                  ...c,
+                  properties: {
+                    ...c.properties,
+                    shapeType,
+                  },
+                }
+              : c
+          ),
+        }));
+      }
+      return id;
     },
 
     updateComponentPos: (id, x, y) => {
@@ -1390,7 +1377,7 @@ export const useCircuitStore = create<CircuitStoreState>((set, get) => {
       if (status === 'running') {
         get().runSimulationCycle(0);
       } else {
-        stopAllSpeakerAudio();
+        stopAllSounds();
         if (status === 'stopped') {
           get().resetSimulation();
         }
@@ -1560,8 +1547,8 @@ export const useCircuitStore = create<CircuitStoreState>((set, get) => {
         });
       }
 
-      // 2. ANALOG Mode: Traces real analog electrical physics (voltage, current, power, hazards, fire/smoke)
-      if (simulationMode === 'ANALOG') {
+      // 2. ANALOG & OFF Modes: Trace real analog electrical physics (voltage, current, power, hazards, fire/smoke); OFF disables wire flow animation only
+      if (simulationMode === 'ANALOG' || simulationMode === 'OFF') {
         // First run logical pass to seed logic gate & MCU digital outputs
         const logicalResult = evaluateLogicalCircuit(updatedComps, updatedWires, nextClock);
         for (const c of updatedComps) {
@@ -1572,9 +1559,19 @@ export const useCircuitStore = create<CircuitStoreState>((set, get) => {
         }
 
         const { showOscilloscope, oscilloscope } = get();
-        // High-resolution physics sub-stepping: 0.5ms per step (2000 samples/sec)
-        const numSubSteps = Math.max(1, Math.min(64, Math.round(deltaTimeMs / 0.5)));
-        const subDtMs = deltaTimeMs / numSubSteps;
+        const isOffMode = simulationMode === 'OFF';
+        const hasFastTransientSource =
+          showOscilloscope ||
+          updatedComps.some(
+            (c) =>
+              c.type === 'ac-source' ||
+              c.type === 'ic-555' ||
+              c.type === 'builtin_555' ||
+              c.type === 'timer-555'
+          );
+        // Adaptive sub-stepping: 16 steps for AC/555/Oscilloscope transients, else 2 steps for 60FPS fluidity
+        const numSubSteps = deltaTimeMs <= 0 ? 1 : hasFastTransientSource ? 16 : 2;
+        const subDtMs = deltaTimeMs > 0 ? deltaTimeMs / numSubSteps : 0;
         const subDtSec = Math.max(0.0005, (subDtMs * simulationSpeed) / 1000);
 
         const getProbeVoltageFromSpice = (
@@ -1635,6 +1632,18 @@ export const useCircuitStore = create<CircuitStoreState>((set, get) => {
         updatedWires = updatedWires.map((w) => {
           const rawV = spiceResult.wireVoltages.get(w.id) ?? 0;
           const i = spiceResult.wireCurrents.get(w.id) ?? 0;
+          if (isOffMode) {
+            return {
+              ...w,
+              state: {
+                ...w.state,
+                voltage: rawV,
+                current: i,
+                logicLevel: undefined,
+                flowDirection: 0,
+              },
+            };
+          }
           const dcOffset = getRectifierDcReferenceOffset(
             { type: 'wire', wireId: w.id },
             updatedComps,
@@ -1767,7 +1776,7 @@ export const useCircuitStore = create<CircuitStoreState>((set, get) => {
         }
       }
 
-      syncSpeakerWebAudio(updatedComps, get().simulationStatus === 'running');
+      syncCircuitSound(updatedComps, get().simulationStatus === 'running', get().isSoundEnabled);
 
       set({
         simClockMs: nextClock,
@@ -1780,9 +1789,11 @@ export const useCircuitStore = create<CircuitStoreState>((set, get) => {
       get().runSimulationCycle(50);
     },
     resetSimulation: () => {
-      stopAllSpeakerAudio();
+      stopAllSounds();
       clearScopeSampleBuffer();
       resetSpiceEngineState();
+      resetWireFlowEngineState();
+      resetCircuitFlowCache();
       resetDiagnosticsState();
       McuManager.getInstance().resetAll();
       const { wires, components } = get();
@@ -2069,13 +2080,18 @@ export const useCircuitStore = create<CircuitStoreState>((set, get) => {
 
     // File I/O
     newCircuit: () => {
+      stopAllSounds();
       clearScopeSampleBuffer();
       resetSpiceEngineState();
+      resetWireFlowEngineState();
+      resetCircuitFlowCache();
       McuManager.getInstance().clear();
       const { components, wires, historyPast } = get();
       const newPast = saveHistorySnapshot(components, wires, historyPast);
       const newProjId = `proj_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       set({
+        simulationStatus: 'stopped',
+        simClockMs: 0,
         currentProjectId: newProjId,
         currentProjectName: 'Untitled Circuit',
         components: [],
@@ -2093,8 +2109,11 @@ export const useCircuitStore = create<CircuitStoreState>((set, get) => {
     },
 
     loadCircuit: (data) => {
+      stopAllSounds();
       clearScopeSampleBuffer();
       resetSpiceEngineState();
+      resetWireFlowEngineState();
+      resetCircuitFlowCache();
       McuManager.getInstance().clear();
       if (data.theme) {
         get().setTheme(data.theme);

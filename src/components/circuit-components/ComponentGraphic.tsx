@@ -11,11 +11,13 @@ interface ComponentGraphicProps {
 }
 
 export const ComponentGraphic: React.FC<ComponentGraphicProps> = ({
-  component,
+  component: rawComponent,
   definition,
   isSelected,
   theme,
 }) => {
+  const simRunning = useCircuitStore((s) => s.simulationStatus === 'running');
+  const component = simRunning ? rawComponent : { ...rawComponent, state: undefined };
   const { type, properties } = component;
   const isDark = theme === 'dark';
   const leadColor = isDark ? '#94a3b8' : '#64748b';
@@ -579,7 +581,7 @@ export const ComponentGraphic: React.FC<ComponentGraphicProps> = ({
       // 4.5. 7-SEGMENT DISPLAY
       // ----------------------------------------------------
       case 'display-7seg': {
-        const segs = component.state?.segments ?? properties.segments ?? {};
+        const segs = simRunning ? (component.state?.segments ?? properties.segments ?? {}) : {};
         const ledColor = properties.color || '#ef4444';
         const offColor = isDark ? '#1e293b' : '#cbd5e1';
 
@@ -645,10 +647,10 @@ export const ComponentGraphic: React.FC<ComponentGraphicProps> = ({
       // 5. MICROCONTROLLERS (Arduino Uno R3, ESP32, Pico)
       // ----------------------------------------------------
       case 'arduino-uno': {
-        const isPowered = component.state?.isPowered ?? (properties.isPowered !== false);
-        const isL = !!(component.state?.ledL ?? properties.ledL ?? ((component.state?.pinVoltages?.['d13'] ?? 0) >= 2.5));
-        const isTx = !!(component.state?.ledTx ?? properties.ledTx);
-        const isRx = !!(component.state?.ledRx ?? properties.ledRx);
+        const isPowered = simRunning && (component.state?.isPowered ?? (properties.isPowered !== false));
+        const isL = simRunning && !!(component.state?.ledL ?? properties.ledL ?? ((component.state?.pinVoltages?.['d13'] ?? 0) >= 2.5));
+        const isTx = simRunning && !!(component.state?.ledTx ?? properties.ledTx);
+        const isRx = simRunning && !!(component.state?.ledRx ?? properties.ledRx);
 
         return (
           <g>
@@ -782,10 +784,10 @@ export const ComponentGraphic: React.FC<ComponentGraphicProps> = ({
       }
 
       case 'esp32': {
-        const isPowered = component.state?.isPowered ?? (properties.isPowered !== false);
-        const isD2 = !!(component.state?.ledL ?? properties.ledL ?? ((component.state?.pinVoltages?.['d2'] ?? 0) >= 2.5));
-        const isTx = !!(component.state?.ledTx ?? properties.ledTx);
-        const isRx = !!(component.state?.ledRx ?? properties.ledRx);
+        const isPowered = simRunning && (component.state?.isPowered ?? (properties.isPowered !== false));
+        const isD2 = simRunning && !!(component.state?.ledL ?? properties.ledL ?? ((component.state?.pinVoltages?.['d2'] ?? 0) >= 2.5));
+        const isTx = simRunning && !!(component.state?.ledTx ?? properties.ledTx);
+        const isRx = simRunning && !!(component.state?.ledRx ?? properties.ledRx);
 
         return (
           <g>
@@ -919,7 +921,7 @@ export const ComponentGraphic: React.FC<ComponentGraphicProps> = ({
       }
 
       case 'pico': {
-        const isPowered = component.state?.isPowered ?? (properties.isPowered !== false);
+        const isPowered = simRunning && (component.state?.isPowered ?? (properties.isPowered !== false));
 
         return (
           <g>
@@ -1154,9 +1156,10 @@ export const ComponentGraphic: React.FC<ComponentGraphicProps> = ({
             ? '#3b82f6'
             : '#eab308');
         const isLit =
-          component.state?.lit !== undefined
+          simRunning &&
+          (component.state?.lit !== undefined
             ? component.state.lit
-            : properties.lit === true;
+            : properties.lit === true);
 
         return (
           <g>
@@ -1215,7 +1218,7 @@ export const ComponentGraphic: React.FC<ComponentGraphicProps> = ({
 
       case 'led-rgb': {
         const hex = properties.colorHex || '#9333ea';
-        const isLit = component.state?.lit !== undefined ? component.state.lit : true;
+        const isLit = simRunning && Boolean(component.state?.lit);
         return (
           <g>
             {isLit && (
@@ -1234,9 +1237,10 @@ export const ComponentGraphic: React.FC<ComponentGraphicProps> = ({
 
       case 'dc-fan': {
         const isRunning =
-          component.state?.isRunning !== undefined
+          simRunning &&
+          (component.state?.isRunning !== undefined
             ? component.state.isRunning
-            : properties.isRunning === true;
+            : properties.isRunning === true);
 
         return (
           <g>
@@ -1279,9 +1283,10 @@ export const ComponentGraphic: React.FC<ComponentGraphicProps> = ({
 
       case 'buzzer': {
         const isSounding =
-          component.state?.isSounding !== undefined
+          simRunning &&
+          (component.state?.isSounding !== undefined
             ? component.state.isSounding
-            : properties.isSounding === true;
+            : properties.isSounding === true);
 
         return (
           <g>
@@ -1311,7 +1316,8 @@ export const ComponentGraphic: React.FC<ComponentGraphicProps> = ({
 
       case 'relay':
       case 'builtin_relay': {
-        const isEngaged = Boolean(component.state?.isEngaged ?? component.properties?.isEngaged);
+        const isEngaged =
+          simRunning && Boolean(component.state?.isEngaged ?? component.properties?.isEngaged);
         return (
           <g>
             {/* Blue Sugar-Cube Relay Module centered in 120x80 */}
@@ -1710,9 +1716,11 @@ export const ComponentGraphic: React.FC<ComponentGraphicProps> = ({
 
       case 'builtin_dc_motor':
       case 'dc-motor': {
-        const rpm = Math.round(component.state?.rpm ?? properties.rpm ?? 0);
-        const direction = (component.state?.direction || properties.direction || 'IDLE') as 'CW' | 'CCW' | 'IDLE';
-        const isSpinning = rpm > 0 && direction !== 'IDLE';
+        const rpm = simRunning ? Math.round(component.state?.rpm ?? properties.rpm ?? 0) : 0;
+        const direction = (
+          simRunning ? component.state?.direction || properties.direction || 'IDLE' : 'IDLE'
+        ) as 'CW' | 'CCW' | 'IDLE';
+        const isSpinning = simRunning && rpm > 0 && direction !== 'IDLE';
         const spinDur = isSpinning ? `${Math.max(0.12, 0.8 - Math.min(0.65, rpm / 10000)).toFixed(2)}s` : '0s';
 
         return (
@@ -1786,9 +1794,9 @@ export const ComponentGraphic: React.FC<ComponentGraphicProps> = ({
 
       case 'builtin_servo_motor':
       case 'servo-motor': {
-        const angle = Math.round(
-          component.state?.servoAngle ?? properties.angle ?? 0
-        );
+        const angle = simRunning
+          ? Math.round(component.state?.servoAngle ?? properties.angle ?? 0)
+          : 0;
         const hornRot = angle;
 
         return (
@@ -1846,7 +1854,7 @@ export const ComponentGraphic: React.FC<ComponentGraphicProps> = ({
 
       case 'builtin_motion_sensor':
       case 'motion-sensor': {
-        const motion = Boolean(component.state?.lit || properties.motionDetected);
+        const motion = simRunning && Boolean(component.state?.lit || properties.motionDetected);
         return (
           <g>
             {/* Bottom 3 Leads at (-20, 40), (0, 40), (+20, 40) */}
@@ -2156,8 +2164,10 @@ export const ComponentGraphic: React.FC<ComponentGraphicProps> = ({
       case 'oled-display': {
         const displaySize = String(properties.displaySize || '128x64');
         const pixelColor = String(properties.pixelColor || '#38bdf8');
-        const rawText = String(properties.displayText ?? 'SECS v7.1\nOLED READY');
-        const lines = rawText.split('\n').slice(0, displaySize === '128x32' ? 2 : 4);
+        const rawText = String(component.state?.displayText ?? properties.displayText ?? '');
+        const lines = rawText.trim()
+          ? rawText.split('\n').slice(0, displaySize === '128x32' ? 2 : 4)
+          : [];
         const progressBar = typeof properties.progressBar === 'number' ? properties.progressBar : null;
         const isSlim = displaySize === '128x32';
         const isLarge = displaySize === '128x64-large';
@@ -2249,8 +2259,12 @@ export const ComponentGraphic: React.FC<ComponentGraphicProps> = ({
 
       case 'builtin_lcd_16x2':
       case 'lcd-16x2': {
-        const row1 = String(properties.row1Text ?? 'HELLO WORLD!    ').padEnd(16, ' ').slice(0, 16);
-        const row2 = String(properties.row2Text ?? 'SECS LCD 16x2   ').padEnd(16, ' ').slice(0, 16);
+        const row1 = String(component.state?.row1Text ?? properties.row1Text ?? '')
+          .padEnd(16, ' ')
+          .slice(0, 16);
+        const row2 = String(component.state?.row2Text ?? properties.row2Text ?? '')
+          .padEnd(16, ' ')
+          .slice(0, 16);
         const isBlue = String(properties.backlightColor || '').toLowerCase().includes('blue');
         const bgFill = isBlue ? '#0284c7' : '#84cc16';
         const cellFill = isBlue ? '#0369a1' : '#65a30d';

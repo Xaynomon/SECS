@@ -12,6 +12,7 @@ import {
   Link,
   RotateCcw,
   Type,
+  Shapes,
   Bold,
   Italic,
   Cpu,
@@ -590,8 +591,306 @@ export const PropertiesInspector: React.FC = () => {
           </div>
         )}
 
+        {/* CASE 1B: DIAGRAM SHAPE ANNOTATION SELECTED */}
+        {selectedComp && selectedComp.type === 'shape' && (
+          <div className="space-y-4">
+            {/* Header Card */}
+            <div
+              className={`flex items-center gap-3 p-2.5 rounded-lg border transition-colors ${
+                isDark ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'
+              }`}
+            >
+              <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400">
+                <Shapes className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-indigo-400">
+                  DIAGRAM SHAPE
+                </span>
+                <div
+                  className={`font-bold text-sm truncate ${
+                    isDark ? 'text-slate-100' : 'text-slate-900'
+                  }`}
+                >
+                  Background Container
+                </div>
+              </div>
+            </div>
+
+            {/* Shape Type */}
+            <div>
+              <label
+                className={`block text-[11px] font-semibold mb-1 ${
+                  isDark ? 'text-slate-400' : 'text-slate-600'
+                }`}
+              >
+                Shape Geometry
+              </label>
+              <select
+                value={selectedComp.properties.shapeType || 'rectangle'}
+                onChange={(e) =>
+                  updateComponentProperty(selectedComp.id, 'shapeType', e.target.value)
+                }
+                className={`w-full border rounded px-2.5 py-1.5 text-xs outline-none ${
+                  isDark
+                    ? 'bg-slate-950 border-slate-700 text-slate-200'
+                    : 'bg-white border-slate-300 text-slate-800'
+                }`}
+              >
+                <option value="rectangle">Rectangle</option>
+                <option value="rounded">Rounded Box</option>
+                <option value="circle">Circle / Ellipse</option>
+                <option value="triangle">Triangle</option>
+                <option value="diamond">Diamond</option>
+              </select>
+            </div>
+
+            {/* Center Label */}
+            <div>
+              <label
+                className={`block text-[11px] font-semibold mb-1 ${
+                  isDark ? 'text-slate-400' : 'text-slate-600'
+                }`}
+              >
+                Center Label (Optional)
+              </label>
+              <input
+                type="text"
+                placeholder="e.g., Power Stage"
+                value={selectedComp.properties.label || ''}
+                onChange={(e) =>
+                  updateComponentProperty(selectedComp.id, 'label', e.target.value)
+                }
+                className={`w-full border rounded px-2.5 py-1.5 text-xs outline-none ${
+                  isDark
+                    ? 'bg-slate-950 border-slate-700 text-slate-200'
+                    : 'bg-white border-slate-300 text-slate-800'
+                }`}
+              />
+            </div>
+
+            {/* Dimensions */}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label
+                  className={`block text-[11px] font-semibold mb-1 ${
+                    isDark ? 'text-slate-400' : 'text-slate-600'
+                  }`}
+                >
+                  Width (px)
+                </label>
+                <input
+                  type="number"
+                  min={40}
+                  max={1600}
+                  step={20}
+                  value={selectedComp.properties.width || 200}
+                  onChange={(e) =>
+                    updateComponentProperty(
+                      selectedComp.id,
+                      'width',
+                      Math.max(40, Number(e.target.value) || 40)
+                    )
+                  }
+                  className={`w-full border rounded px-2 py-1 text-xs font-mono outline-none ${
+                    isDark
+                      ? 'bg-slate-950 border-slate-700 text-slate-200'
+                      : 'bg-white border-slate-300 text-slate-800'
+                  }`}
+                />
+              </div>
+              <div>
+                <label
+                  className={`block text-[11px] font-semibold mb-1 ${
+                    isDark ? 'text-slate-400' : 'text-slate-600'
+                  }`}
+                >
+                  Height (px)
+                </label>
+                <input
+                  type="number"
+                  min={40}
+                  max={1600}
+                  step={20}
+                  value={selectedComp.properties.height || 140}
+                  onChange={(e) =>
+                    updateComponentProperty(
+                      selectedComp.id,
+                      'height',
+                      Math.max(40, Number(e.target.value) || 40)
+                    )
+                  }
+                  className={`w-full border rounded px-2 py-1 text-xs font-mono outline-none ${
+                    isDark
+                      ? 'bg-slate-950 border-slate-700 text-slate-200'
+                      : 'bg-white border-slate-300 text-slate-800'
+                  }`}
+                />
+              </div>
+            </div>
+
+            {/* Fill Color & Opacity */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <label
+                  className={`text-[11px] font-semibold ${
+                    isDark ? 'text-slate-400' : 'text-slate-600'
+                  }`}
+                >
+                  Fill Color
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={selectedComp.properties.fillColor || '#38bdf8'}
+                    onChange={(e) =>
+                      updateComponentProperty(selectedComp.id, 'fillColor', e.target.value)
+                    }
+                    className="w-7 h-6 rounded border-0 cursor-pointer bg-transparent p-0"
+                  />
+                  <span className="text-[11px] font-mono text-slate-400">
+                    {selectedComp.properties.fillColor || '#38bdf8'}
+                  </span>
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label
+                    className={`text-[11px] font-semibold ${
+                      isDark ? 'text-slate-400' : 'text-slate-600'
+                    }`}
+                  >
+                    Fill Opacity
+                  </label>
+                  <span className="text-[11px] font-mono text-slate-400">
+                    {Math.round(
+                      ((selectedComp.properties.fillOpacity ?? 0.08) as number) * 100
+                    )}
+                    %
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={selectedComp.properties.fillOpacity ?? 0.08}
+                  onChange={(e) =>
+                    updateComponentProperty(
+                      selectedComp.id,
+                      'fillOpacity',
+                      Number(e.target.value)
+                    )
+                  }
+                  className="w-full accent-indigo-500 cursor-pointer"
+                />
+              </div>
+            </div>
+
+            {/* Stroke Color, Width & Style */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <label
+                  className={`text-[11px] font-semibold ${
+                    isDark ? 'text-slate-400' : 'text-slate-600'
+                  }`}
+                >
+                  Stroke Color
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={selectedComp.properties.strokeColor || '#38bdf8'}
+                    onChange={(e) =>
+                      updateComponentProperty(selectedComp.id, 'strokeColor', e.target.value)
+                    }
+                    className="w-7 h-6 rounded border-0 cursor-pointer bg-transparent p-0"
+                  />
+                  <span className="text-[11px] font-mono text-slate-400">
+                    {selectedComp.properties.strokeColor || '#38bdf8'}
+                  </span>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label
+                    className={`block text-[11px] font-semibold mb-1 ${
+                      isDark ? 'text-slate-400' : 'text-slate-600'
+                    }`}
+                  >
+                    Stroke Width
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={10}
+                    step={0.5}
+                    value={selectedComp.properties.strokeWidth ?? 2}
+                    onChange={(e) =>
+                      updateComponentProperty(
+                        selectedComp.id,
+                        'strokeWidth',
+                        Math.max(0, Number(e.target.value))
+                      )
+                    }
+                    className={`w-full border rounded px-2 py-1 text-xs font-mono outline-none ${
+                      isDark
+                        ? 'bg-slate-950 border-slate-700 text-slate-200'
+                        : 'bg-white border-slate-300 text-slate-800'
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label
+                    className={`block text-[11px] font-semibold mb-1 ${
+                      isDark ? 'text-slate-400' : 'text-slate-600'
+                    }`}
+                  >
+                    Stroke Style
+                  </label>
+                  <select
+                    value={selectedComp.properties.strokeStyle || 'dashed'}
+                    onChange={(e) =>
+                      updateComponentProperty(selectedComp.id, 'strokeStyle', e.target.value)
+                    }
+                    className={`w-full border rounded px-2 py-1 text-xs outline-none ${
+                      isDark
+                        ? 'bg-slate-950 border-slate-700 text-slate-200'
+                        : 'bg-white border-slate-300 text-slate-800'
+                    }`}
+                  >
+                    <option value="solid">Solid</option>
+                    <option value="dashed">Dashed</option>
+                    <option value="dotted">Dotted</option>
+                    <option value="none">None</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div
+              className={`text-[10px] font-mono flex items-center justify-between px-1 ${
+                isDark ? 'text-slate-400' : 'text-slate-500'
+              }`}
+            >
+              <span>
+                Position: ({selectedComp.x}, {selectedComp.y})
+              </span>
+              <span>Layer: Background</span>
+            </div>
+
+            <button
+              onClick={deleteSelected}
+              className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-500 border border-rose-500/30 text-xs font-semibold transition"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Shape</span>
+            </button>
+          </div>
+        )}
+
         {/* CASE 2: STANDARD ELECTRICAL COMPONENT SELECTED */}
-        {selectedComp && compDef && selectedComp.type !== 'textbox' && (
+        {selectedComp && compDef && selectedComp.type !== 'textbox' && selectedComp.type !== 'shape' && (
           <div className="space-y-4">
             {/* Component Summary Card */}
             <div
@@ -701,7 +1000,7 @@ export const PropertiesInspector: React.FC = () => {
                   className="flex items-center justify-center gap-2 py-2 px-3 bg-teal-600 hover:bg-teal-500 text-white rounded-md text-xs font-medium transition shadow-sm"
                 >
                   <Code className="w-4 h-4" />
-                  <span>&lt;/&gt; Edit Code & Serial</span>
+                  <span>Edit Code & Serial</span>
                 </button>
               </div>
             )}
@@ -770,7 +1069,7 @@ export const PropertiesInspector: React.FC = () => {
                     className="flex items-center justify-center gap-2 py-2 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md text-xs font-medium transition shadow-sm"
                   >
                     <Code className="w-4 h-4" />
-                    <span>&lt;/&gt; Assembly IDE & Registers</span>
+                    <span>Assembly IDE & Registers</span>
                   </button>
                 </div>
               );

@@ -95,6 +95,70 @@ class ComponentRegistryClass {
    */
   private registerBuiltinComponents(): void {
     // ==========================================
+    // 0. DIAGRAM ANNOTATIONS & SHAPES
+    // ==========================================
+    this.registerComponent({
+      id: 'shape',
+      name: 'Diagram Shape',
+      category: 'annotations',
+      description: 'Customizable background container shape (Rectangle, Rounded, Circle, Triangle, Diamond) for schematic grouping',
+      tags: ['shape', 'rectangle', 'rounded', 'circle', 'triangle', 'diamond', 'box', 'frame', 'group', 'annotation'],
+      width: 200,
+      height: 140,
+      origin: 'top-left',
+      defaultDesignator: 'SHP',
+      renderType: 'composite_shapes',
+      simulationModel: {
+        type: 'logical',
+        logicFunction: 'NONE',
+      },
+      pins: [],
+      defaultProperties: {
+        shapeType: 'rectangle',
+        width: 200,
+        height: 140,
+        fillColor: '#38bdf8',
+        fillOpacity: 0.08,
+        strokeColor: '#38bdf8',
+        strokeWidth: 2,
+        strokeStyle: 'dashed',
+        label: '',
+      },
+      propertySchema: [
+        {
+          key: 'shapeType',
+          label: 'Shape Type',
+          type: 'select',
+          options: [
+            { label: 'Rectangle', value: 'rectangle' },
+            { label: 'Rounded Box', value: 'rounded' },
+            { label: 'Circle / Ellipse', value: 'circle' },
+            { label: 'Triangle', value: 'triangle' },
+            { label: 'Diamond', value: 'diamond' },
+          ],
+        },
+        { key: 'width', label: 'Width', type: 'number', unit: 'px', min: 40, max: 1200, step: 20 },
+        { key: 'height', label: 'Height', type: 'number', unit: 'px', min: 40, max: 1200, step: 20 },
+        { key: 'fillColor', label: 'Fill Color', type: 'color' },
+        { key: 'fillOpacity', label: 'Fill Opacity', type: 'number', min: 0, max: 1, step: 0.05 },
+        { key: 'strokeColor', label: 'Stroke Color', type: 'color' },
+        { key: 'strokeWidth', label: 'Stroke Width', type: 'number', unit: 'px', min: 0, max: 10, step: 0.5 },
+        {
+          key: 'strokeStyle',
+          label: 'Stroke Style',
+          type: 'select',
+          options: [
+            { label: 'Solid', value: 'solid' },
+            { label: 'Dashed', value: 'dashed' },
+            { label: 'Dotted', value: 'dotted' },
+            { label: 'None', value: 'none' },
+          ],
+        },
+        { key: 'label', label: 'Center Label', type: 'text' },
+      ],
+    });
+
+    // ==========================================
     // 1. POWER & SOURCES
     // ==========================================
     this.registerComponent({
@@ -1015,7 +1079,7 @@ class ComponentRegistryClass {
         { id: 'anode', label: 'Anode (+)', x: 0, y: 20, direction: 'passive' as PinDirection },
         { id: 'cathode', label: 'Cathode (-)', x: 80, y: 20, direction: 'passive' as PinDirection },
       ],
-      defaultProperties: { color: hex, forwardVoltage: 2.0, maxCurrentMa: 20, lit: true, brightness: 100 },
+      defaultProperties: { color: hex, forwardVoltage: 2.0, maxCurrentMa: 20, lit: false, brightness: 0 },
       propertySchema: [
         { key: 'forwardVoltage', label: 'Vf', type: 'number' as const, unit: 'V', min: 1.6, max: 3.5, step: 0.1 },
       ],
@@ -1062,7 +1126,7 @@ class ComponentRegistryClass {
         { id: 'pos', label: '+ (12V)', x: 0, y: 20, direction: 'input' },
         { id: 'neg', label: '- (GND)', x: 0, y: 60, direction: 'passive' },
       ],
-      defaultProperties: { nominalRpm: 2500, voltage: 12, isRunning: true },
+      defaultProperties: { nominalRpm: 2500, voltage: 12, isRunning: false },
       propertySchema: [
         { key: 'voltage', label: 'Rated Voltage', type: 'number', unit: 'V', min: 5, max: 24, step: 1 },
       ],
@@ -1429,7 +1493,7 @@ class ComponentRegistryClass {
       defaultProperties: {
         screenSize: '128x64',
         pixelColor: '#38bdf8',
-        displayText: 'SECS OLED\nREADY!',
+        displayText: '',
         maxVoltage: 6.0,
       },
       propertySchema: [
@@ -1479,8 +1543,8 @@ class ComponentRegistryClass {
         { id: 'd6', label: 'D6', x: 60, y: 40, direction: 'input' },
       ],
       defaultProperties: {
-        row1Text: 'SECS 16x2 LCD',
-        row2Text: 'SYSTEM READY',
+        row1Text: '',
+        row2Text: '',
         backlightColor: 'green',
         maxVoltage: 6.5,
       },

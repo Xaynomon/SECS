@@ -8,6 +8,12 @@ export interface AsmInstruction {
   raw: string;
 }
 
+export interface JunctionCountdownState {
+  currentSeconds: number;
+  tensValue: number;
+  onesValue: number;
+}
+
 export interface AsmRegisters {
   acc: number;       // 8-bit Accumulator A (0..255)
   regB: number;      // 8-bit Register B (0..255)
@@ -19,6 +25,7 @@ export interface AsmRegisters {
   halted: boolean;
   currentLine: number;
   currentMnemonic: string;
+  junctionCountdowns?: Record<'n' | 'e' | 's' | 'w', JunctionCountdownState>;
 }
 
 export interface AsmTemplate {
@@ -225,6 +232,28 @@ export class AsmRuntime {
       pwmValue: rwBit ? 255 : 0,
       voltage: rwBit ? 5.0 : 0.0,
     };
+
+    // Atomic 4-way junction countdown computation (synchronizes tens & ones on same tick)
+    const phaseMask = (this.registers.outByte >> 4) & 0x0f;
+    if (phaseMask === 1 || phaseMask === 2 || phaseMask === 4 || phaseMask === 8) {
+      const activePhase = phaseMask === 1 ? 0 : phaseMask === 2 ? 1 : phaseMask === 4 ? 2 : 3;
+      const rawOnes = this.registers.outByte & 0x0f;
+      const phaseSecondsRemaining = rawOnes === 0 ? 10 : rawOnes;
+      const keys: Array<'n' | 'e' | 's' | 'w'> = ['n', 'e', 's', 'w'];
+      const countdowns = {} as Record<'n' | 'e' | 's' | 'w', JunctionCountdownState>;
+      keys.forEach((k, jIdx) => {
+        const slot = (jIdx - activePhase + 4) % 4;
+        const slotOffset = slot === 0 ? 0 : slot === 1 ? 0 : slot === 2 ? 10 : 20;
+        const totalSecondsRemaining = slotOffset + phaseSecondsRemaining;
+        const currentSeconds = Math.max(0, Math.round(totalSecondsRemaining));
+        const tensValue = Math.floor(currentSeconds / 10);
+        const onesValue = currentSeconds % 10;
+        countdowns[k] = { currentSeconds, tensValue, onesValue };
+      });
+      this.registers.junctionCountdowns = countdowns;
+    } else {
+      this.registers.junctionCountdowns = undefined;
+    }
   }
 
   public compile(asmCode: string): boolean {
@@ -354,10 +383,21 @@ export class AsmRuntime {
         this.executeOneInstruction(simClockMs);
       }
     } else {
-      const periodMs = 1000 / Math.max(0.5, this.clockHz);
-      if (simClockMs === 0 || simClockMs - this.lastAutoStepClockMs >= periodMs) {
+      const usesWait = this.instructions.some((ins) => ins.op === 'WAIT');
+      if (usesWait) {
+        // Execute setup/branch/OUT burst atomically up to the next WAIT instruction
+        // so display digits and light outputs latch on the exact same tick.
         this.lastAutoStepClockMs = simClockMs;
-        this.executeOneInstruction(simClockMs);
+        for (let burst = 0; burst < 24; burst++) {
+          if (this.registers.halted || simClockMs < this.suspendUntilClockMs) break;
+          this.executeOneInstruction(simClockMs);
+        }
+      } else {
+        const periodMs = 1000 / Math.max(0.5, this.clockHz);
+        if (simClockMs === 0 || simClockMs - this.lastAutoStepClockMs >= periodMs) {
+          this.lastAutoStepClockMs = simClockMs;
+          this.executeOneInstruction(simClockMs);
+        }
       }
     }
   }

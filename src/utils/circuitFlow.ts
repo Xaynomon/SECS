@@ -4,6 +4,38 @@ import { COMPONENT_DEFINITIONS } from '../constants/componentLibrary';
 
 const GROUND_TYPES = new Set(['gnd', 'builtin_gnd', 'builtin_ground']);
 
+let cachedFlowOrderSig = '';
+let cachedFlowOrderResult: CircuitFlowRankResult | null = null;
+
+/**
+ * Generates a compact signature representing circuit connectivity and static switch/relay/fuse states
+ * so multi-pass graph traversals can be safely memoized across 60FPS animation ticks.
+ */
+export function getTopologySignature(
+  components: CircuitComponent[],
+  wires: CircuitWire[]
+): string {
+  const compParts: string[] = new Array(components.length);
+  for (let i = 0; i < components.length; i++) {
+    const c = components[i];
+    const p = c.properties || {};
+    const s = c.state || {};
+    const switchesKey = Array.isArray(p.switches) ? p.switches.join(',') : '';
+    compParts[i] = `${c.id}:${c.type}:${p.closed ?? ''}:${p.isClosed ?? ''}:${p.pressed ?? ''}:${p.isPressed ?? ''}:${p.position ?? ''}:${p.mode ?? ''}:${p.voltage ?? ''}:${switchesKey}:${s.closed ?? ''}:${s.isClosed ?? ''}:${s.blown ?? ''}:${s.isOverloaded ?? ''}:${s.energized ?? ''}:${s.isEnergized ?? ''}`;
+  }
+  const wireParts: string[] = new Array(wires.length);
+  for (let i = 0; i < wires.length; i++) {
+    const w = wires[i];
+    wireParts[i] = `${w.id}:${w.fromCompId}.${w.fromPinId}>${w.toCompId}.${w.toPinId}`;
+  }
+  return `${components.length}|${wires.length}|${compParts.join(';')}|${wireParts.join(';')}`;
+}
+
+export function resetCircuitFlowCache(): void {
+  cachedFlowOrderSig = '';
+  cachedFlowOrderResult = null;
+}
+
 /**
  * Universally identifies whether a component pin is a Power Source Output:
  * VCC, 5V, 3V3, Battery (+), AC (+), Solar (+), Regulator OUT, Gate/MCU/RX Output.
@@ -668,7 +700,25 @@ export interface CircuitFlowRankResult {
  * 2. Runs Dijkstra along wires (+1 hop) and forward through components (+10 per stage).
  * 3. Combines into flowOrder(p) = sourceDist(p) - gndDist(p), which strictly increases from Source to GND.
  */
+/**
+ * Computes topological component flow order with O(1) memoization when circuit
+ * topology and switching states are unchanged.
+ */
 export function computeCircuitFlowOrder(
+  allComponents: CircuitComponent[],
+  allWires: CircuitWire[]
+): CircuitFlowRankResult {
+  const sig = getTopologySignature(allComponents, allWires);
+  if (sig === cachedFlowOrderSig && cachedFlowOrderResult) {
+    return cachedFlowOrderResult;
+  }
+  const result = computeCircuitFlowOrderUncached(allComponents, allWires);
+  cachedFlowOrderSig = sig;
+  cachedFlowOrderResult = result;
+  return result;
+}
+
+function computeCircuitFlowOrderUncached(
   allComponents: CircuitComponent[],
   allWires: CircuitWire[]
 ): CircuitFlowRankResult {
@@ -804,6 +854,7 @@ export function computeWireFlowDirection(
   allWires?: CircuitWire[],
   allComponents?: CircuitComponent[]
 ): 1 | -1 | 0 {
+  if (_simulationMode === 'OFF') return 0;
   if (!fromComp || !toComp) return 1;
 
   // ---------------------------------------------------------------------------

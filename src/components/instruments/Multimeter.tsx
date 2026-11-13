@@ -16,6 +16,7 @@ import {
   getProbedResistance,
   getProbeTargetDisplay,
 } from '../../utils/instrumentSignals';
+import { setContinuityBeep } from '../../utils/soundEngine';
 
 export const Multimeter: React.FC = () => {
   const {
@@ -34,6 +35,7 @@ export const Multimeter: React.FC = () => {
     wires,
     simulationStatus,
     simulationMode,
+    isSoundEnabled,
   } = useCircuitStore();
 
   const isDark = theme === 'dark';
@@ -95,6 +97,22 @@ export const Multimeter: React.FC = () => {
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [isDragging]);
+
+  // Synchronize continuity tester 2000Hz WebAudio beep with soundEngine
+  useEffect(() => {
+    const shouldBeep =
+      showMultimeter &&
+      simulationStatus === 'running' &&
+      multimeter.mode === 'CONT' &&
+      isContinuityBeep;
+    setContinuityBeep(shouldBeep, isSoundEnabled);
+  }, [showMultimeter, simulationStatus, multimeter.mode, isContinuityBeep, isSoundEnabled]);
+
+  useEffect(() => {
+    return () => {
+      setContinuityBeep(false, false);
+    };
+  }, []);
 
   // Compute live reading on tick / changes
   useEffect(() => {

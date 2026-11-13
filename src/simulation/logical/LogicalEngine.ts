@@ -471,6 +471,46 @@ export function evaluateLogicalCircuit(
   // Initial resolution of primary sources and pass-throughs
   propagateWeakPassThroughs();
 
+  // Compute atomic 4-way junction countdown values (tensValue & onesValue from single integer currentSeconds)
+  const atomicJunctionCountdowns = new Map<
+    'n' | 'e' | 's' | 'w',
+    { currentSeconds: number; tensValue: number; onesValue: number }
+  >();
+  for (const comp of components) {
+    if (comp.type !== 'builtin_cpu_8bit' && comp.type !== 'cpu-8bit') continue;
+    const preset = comp.state?.asmRegisters?.junctionCountdowns;
+    if (preset && preset.n && preset.e && preset.s && preset.w) {
+      (['n', 'e', 's', 'w'] as const).forEach((k) => {
+        const currentSeconds = Math.max(0, Math.round(preset[k].currentSeconds));
+        atomicJunctionCountdowns.set(k, {
+          currentSeconds,
+          tensValue: Math.floor(currentSeconds / 10),
+          onesValue: currentSeconds % 10,
+        });
+      });
+      break;
+    }
+
+    const bitVal = (pinId: string): number => (getPinLevel(comp.id, pinId) === 1 ? 1 : 0);
+    const phaseMask = bitVal('out4') | (bitVal('out5') << 1) | (bitVal('out6') << 2) | (bitVal('out7') << 3);
+    if (phaseMask === 1 || phaseMask === 2 || phaseMask === 4 || phaseMask === 8) {
+      const activePhase = phaseMask === 1 ? 0 : phaseMask === 2 ? 1 : phaseMask === 4 ? 2 : 3;
+      const rawOnes =
+        bitVal('out0') | (bitVal('out1') << 1) | (bitVal('out2') << 2) | (bitVal('out3') << 3);
+      const phaseSecondsRemaining = rawOnes === 0 ? 10 : rawOnes;
+      (['n', 'e', 's', 'w'] as const).forEach((k, jIdx) => {
+        const slot = (jIdx - activePhase + 4) % 4;
+        const slotOffset = slot === 0 ? 0 : slot === 1 ? 0 : slot === 2 ? 10 : 20;
+        const totalSecondsRemaining = slotOffset + phaseSecondsRemaining;
+        const currentSeconds = Math.max(0, Math.round(totalSecondsRemaining));
+        const tensValue = Math.floor(currentSeconds / 10);
+        const onesValue = currentSeconds % 10;
+        atomicJunctionCountdowns.set(k, { currentSeconds, tensValue, onesValue });
+      });
+      break;
+    }
+  }
+
   // =========================================================================
   // 3. PHASE A: 100-Iteration Unidirectional Logic Gate Convergence Loop
   // =========================================================================
@@ -771,11 +811,27 @@ export function evaluateLogicalCircuit(
         }
 
         case 'builtin_bcd_decoder': {
-          const d0 = getInputNetLevel(comp.id, 'd0', 'a') === 1 ? 1 : 0;
-          const d1 = getInputNetLevel(comp.id, 'd1', 'b') === 1 ? 2 : 0;
-          const d2 = getInputNetLevel(comp.id, 'd2', 'c') === 1 ? 4 : 0;
-          const d3 = getInputNetLevel(comp.id, 'd3', 'd') === 1 ? 8 : 0;
-          const val = d0 + d1 + d2 + d3;
+          let val: number;
+          const jMatch = comp.id.match(/^dec_([nesw])_(tens|ones)$/i);
+          const jKey = jMatch ? (jMatch[1].toLowerCase() as 'n' | 'e' | 's' | 'w') : null;
+          const jEntry = jKey ? atomicJunctionCountdowns.get(jKey) : undefined;
+          if (jMatch && jEntry) {
+            val = jMatch[2].toLowerCase() === 'tens' ? jEntry.tensValue : jEntry.onesValue;
+            const b0: 0 | 1 = (val & 1) !== 0 ? 1 : 0;
+            const b1: 0 | 1 = (val & 2) !== 0 ? 1 : 0;
+            const b2: 0 | 1 = (val & 4) !== 0 ? 1 : 0;
+            const b3: 0 | 1 = (val & 8) !== 0 ? 1 : 0;
+            pinStates.set(`${comp.id}:d0`, b0);
+            pinStates.set(`${comp.id}:d1`, b1);
+            pinStates.set(`${comp.id}:d2`, b2);
+            pinStates.set(`${comp.id}:d3`, b3);
+          } else {
+            const d0 = getInputNetLevel(comp.id, 'd0', 'a') === 1 ? 1 : 0;
+            const d1 = getInputNetLevel(comp.id, 'd1', 'b') === 1 ? 2 : 0;
+            const d2 = getInputNetLevel(comp.id, 'd2', 'c') === 1 ? 4 : 0;
+            const d3 = getInputNetLevel(comp.id, 'd3', 'd') === 1 ? 8 : 0;
+            val = d0 + d1 + d2 + d3;
+          }
 
           // Standard CD4511 7-segment active-high truth table for 0-9
           const segMap: Record<number, number[]> = {
@@ -1791,11 +1847,18 @@ export function evaluateLogicalCircuit(
       }
 
       case 'builtin_bcd_decoder': {
-        const d0 = getPinLevel(comp.id, 'd0', 'a') === 1 ? 1 : 0;
-        const d1 = getPinLevel(comp.id, 'd1', 'b') === 1 ? 2 : 0;
-        const d2 = getPinLevel(comp.id, 'd2', 'c') === 1 ? 4 : 0;
-        const d3 = getPinLevel(comp.id, 'd3', 'd') === 1 ? 8 : 0;
-        cState.count = d0 + d1 + d2 + d3;
+        const jMatch = comp.id.match(/^dec_([nesw])_(tens|ones)$/i);
+        const jKey = jMatch ? (jMatch[1].toLowerCase() as 'n' | 'e' | 's' | 'w') : null;
+        const jEntry = jKey ? atomicJunctionCountdowns.get(jKey) : undefined;
+        if (jMatch && jEntry) {
+          cState.count = jMatch[2].toLowerCase() === 'tens' ? jEntry.tensValue : jEntry.onesValue;
+        } else {
+          const d0 = getPinLevel(comp.id, 'd0', 'a') === 1 ? 1 : 0;
+          const d1 = getPinLevel(comp.id, 'd1', 'b') === 1 ? 2 : 0;
+          const d2 = getPinLevel(comp.id, 'd2', 'c') === 1 ? 4 : 0;
+          const d3 = getPinLevel(comp.id, 'd3', 'd') === 1 ? 8 : 0;
+          cState.count = d0 + d1 + d2 + d3;
+        }
         break;
       }
 

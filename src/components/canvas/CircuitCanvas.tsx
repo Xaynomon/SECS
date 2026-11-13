@@ -6,6 +6,7 @@ import { COMPONENT_DEFINITIONS } from '../../constants/componentLibrary';
 import { ComponentRegistry } from '../../registry/ComponentRegistry';
 import { ComponentGraphic } from '../circuit-components/ComponentGraphic';
 import { SchematicTextBox } from '../circuit-components/SchematicTextBox';
+import { SchematicShape } from '../circuit-components/SchematicShape';
 import { SensorContextHUD } from '../simulation/SensorContextHUD';
 import { PinTerminal } from './PinTerminal';
 import {
@@ -964,12 +965,110 @@ export const CircuitCanvas: React.FC = () => {
   };
 
   // Render Placed Wires with Interactive Segments & Waypoints
+  const renderAnnotationItem = (component: CircuitComponent) => {
+    const isSelected =
+      selectedComponentIds.includes(component.id) || selectedComponentId === component.id;
+    const isHighlighted = highlightedComponentId === component.id;
+    const boxW =
+      component.type === 'shape'
+        ? Math.max(40, Number(component.properties?.width) || 200)
+        : component.properties?.boxWidth || component.properties?.width || 160;
+    const boxH =
+      component.type === 'shape'
+        ? Math.max(40, Number(component.properties?.height) || 140)
+        : component.properties?.boxHeight || component.properties?.height || 80;
+
+    return (
+      <g
+        key={component.id}
+        onDragStart={(e) => e.preventDefault()}
+        transform={`translate(${component.x}, ${component.y})`}
+        className="cursor-move"
+        onMouseDown={(e) => {
+          e.stopPropagation();
+          if (contextMenuTarget) setContextMenuTarget(null);
+          if (e.button === 0) {
+            e.preventDefault();
+            preDragPositionsRef.current = new Map(components.map((c) => [c.id, { x: c.x, y: c.y }]));
+            preDragSnapshotRef.current = {
+              components: JSON.parse(JSON.stringify(components)),
+              wires: JSON.parse(JSON.stringify(wires)),
+            };
+            const isShift = e.shiftKey;
+            const isAlreadySelected = selectedComponentIds.includes(component.id);
+
+            if (isShift) {
+              selectComponent(component.id, true);
+            } else if (!isAlreadySelected) {
+              selectComponent(component.id, false);
+            }
+
+            const world = screenToWorld(e.clientX, e.clientY);
+            const targetIds = isShift
+              ? isAlreadySelected
+                ? selectedComponentIds.filter((id) => id !== component.id)
+                : [...selectedComponentIds, component.id]
+              : isAlreadySelected
+              ? selectedComponentIds
+              : [component.id];
+
+            const initMap = new Map<string, { x: number; y: number }>();
+            components.forEach((c) => {
+              if (targetIds.includes(c.id)) {
+                initMap.set(c.id, { x: c.x, y: c.y });
+              }
+            });
+
+            setGroupDragInitials(initMap);
+            setGroupDragStartWorld(world);
+            setDraggingCompId(component.id);
+            setCompDragOffset({
+              x: world.x - component.x,
+              y: world.y - component.y,
+            });
+          }
+        }}
+      >
+        {isHighlighted && (
+          <rect
+            x="-6"
+            y="-6"
+            width={boxW + 12}
+            height={boxH + 12}
+            rx="6"
+            fill="none"
+            stroke="#38bdf8"
+            strokeWidth="2.5"
+            className="animate-pulse"
+            filter="drop-shadow(0 0 8px #38bdf8)"
+          />
+        )}
+        {component.type === 'shape' ? (
+          <SchematicShape
+            component={component}
+            isSelected={isSelected}
+            theme={theme}
+            zoom={viewport.zoom}
+          />
+        ) : (
+          <SchematicTextBox
+            component={component}
+            isSelected={isSelected}
+            theme={theme}
+            zoom={viewport.zoom}
+          />
+        )}
+      </g>
+    );
+  };
+
   const renderWires = () => {
     const isSimRunning = simulationStatus === 'running';
+    const isOffMode = simulationMode === 'OFF';
     const isLogicalMode = simulationMode === 'LOGICAL';
     const isAnalogMode = simulationMode === 'ANALOG';
-    const energizedPins = isAnalogMode ? computeEnergizedPins(components, wires) : undefined;
-    const directionField = computeFlowDirectionField(components, wires, simulationMode);
+    const energizedPins = !isOffMode && isAnalogMode ? computeEnergizedPins(components, wires) : undefined;
+    const directionField = isOffMode ? undefined : computeFlowDirectionField(components, wires, simulationMode);
 
     return wires.map((wire) => {
       const fromComp = components.find((c) => c.id === wire.fromCompId);
@@ -986,9 +1085,20 @@ export const CircuitCanvas: React.FC = () => {
       const points = computeWirePoints(startPos, endPos, wire.waypoints || [], components, wires, wire.id);
       const pathD = pointsToSvgPath(points, 4);
 
-      // Compute visual flow status using isolated Wire Flow Engine
-      const flowInfo: WireFlowVisualResult = isLogicalMode
-        ? computeLogicalWireFlow(wire, fromComp, toComp, wire.state, undefined, directionField)
+      // Compute visual flow status using isolated Wire Flow Engine (O(1) bypass when OFF)
+      const flowInfo: WireFlowVisualResult = isOffMode
+        ? {
+            hasFlow: false,
+            isFlowing: false,
+            flowColor: wire.color,
+            flowDirection: 1,
+            isProblematic: false,
+            isShortCircuit: false,
+            effectiveVoltage: 0,
+            effectiveCurrent: 0,
+          }
+        : isLogicalMode
+        ? computeLogicalWireFlow(wire, fromComp, toComp, wire.state, undefined, directionField, simulationMode)
         : computeAnalogWireFlow(
             wire,
             fromComp,
@@ -999,10 +1109,12 @@ export const CircuitCanvas: React.FC = () => {
             wires,
             isSimRunning,
             energizedPins,
-            directionField
+            directionField,
+            undefined,
+            simulationMode
           );
 
-      const shouldReversePath = directionField.get(wire.id) === -1;
+      const shouldReversePath = !isOffMode && directionField?.get(wire.id) === -1;
       const orderedPoints = shouldReversePath ? [...points].reverse() : points;
       const flowPathD = pointsToSvgPath(orderedPoints, 4);
       const isSelected = selectedWireId === wire.id;
@@ -1011,9 +1123,9 @@ export const CircuitCanvas: React.FC = () => {
 
       const segments = getWireSegments(points);
       const logicLevel = wire.state?.logicLevel;
-      const hasActiveCurrent = isAnalogMode && flowInfo.hasFlow;
-      const hasLogicalHigh = isLogicalMode && flowInfo.hasFlow;
-      const isShortCircuit = isSimRunning && flowInfo.isShortCircuit;
+      const hasActiveCurrent = !isOffMode && isAnalogMode && flowInfo.hasFlow;
+      const hasLogicalHigh = !isOffMode && isLogicalMode && flowInfo.hasFlow;
+      const isShortCircuit = !isOffMode && isSimRunning && flowInfo.isShortCircuit;
 
       const terminalFill = isSelected
         ? '#38bdf8'
@@ -1116,8 +1228,8 @@ export const CircuitCanvas: React.FC = () => {
             fill="none"
             stroke={isSelected ? '#38bdf8' : isShortCircuit ? '#dc2626' : wire.color}
             strokeWidth={isSelected ? '3' : '2.5'}
-            strokeDasharray={!isShortCircuit && !hasActiveCurrent && logicLevel === 'Z' ? '5 3' : undefined}
-            opacity={!isShortCircuit && !hasActiveCurrent && logicLevel === 'Z' ? 0.65 : 1}
+            strokeDasharray={!isOffMode && !isShortCircuit && !hasActiveCurrent && logicLevel === 'Z' ? '5 3' : undefined}
+            opacity={!isOffMode && !isShortCircuit && !hasActiveCurrent && logicLevel === 'Z' ? 0.65 : 1}
             strokeLinecap="round"
             strokeLinejoin="round"
             className="transition-colors duration-150"
@@ -1370,6 +1482,9 @@ export const CircuitCanvas: React.FC = () => {
           <line x1="0" y1="-20" x2="0" y2="20" stroke={isDark ? '#334155' : '#cbd5e1'} strokeWidth="1" />
           <line x1="-20" y1="0" x2="20" y2="0" stroke={isDark ? '#334155' : '#cbd5e1'} strokeWidth="1" />
 
+          {/* Render Background Diagram Shapes (behind wires and components) */}
+          {components.filter((c) => c.type === 'shape').map(renderAnnotationItem)}
+
           {/* Render Placed Wires */}
           {renderWires()}
 
@@ -1378,6 +1493,8 @@ export const CircuitCanvas: React.FC = () => {
 
           {/* Render Components */}
           {components.map((component) => {
+            if (component.type === 'shape') return null;
+
             const registryDef = ComponentRegistry.getComponentDefinition(component.type);
             const def = registryDef || COMPONENT_DEFINITIONS[component.type];
             if (!def) return null;
@@ -1388,77 +1505,7 @@ export const CircuitCanvas: React.FC = () => {
 
             // Handle Textbox Annotations & Notes
             if (component.type === 'textbox') {
-              return (
-                <g
-                  key={component.id}
-                  onDragStart={(e) => e.preventDefault()}
-                  transform={`translate(${component.x}, ${component.y})`}
-                  className="cursor-move"
-                  onMouseDown={(e) => {
-                    e.stopPropagation();
-                    if (contextMenuTarget) setContextMenuTarget(null);
-                    if (e.button === 0) {
-                      e.preventDefault();
-                      preDragPositionsRef.current = new Map(components.map((c) => [c.id, { x: c.x, y: c.y }]));
-                      preDragSnapshotRef.current = {
-                        components: JSON.parse(JSON.stringify(components)),
-                        wires: JSON.parse(JSON.stringify(wires)),
-                      };
-                      const isShift = e.shiftKey;
-                      const isAlreadySelected = selectedComponentIds.includes(component.id);
-
-                      if (isShift) {
-                        selectComponent(component.id, true);
-                      } else if (!isAlreadySelected) {
-                        selectComponent(component.id, false);
-                      }
-
-                      const world = screenToWorld(e.clientX, e.clientY);
-                      const targetIds = isShift
-                        ? (isAlreadySelected
-                            ? selectedComponentIds.filter((id) => id !== component.id)
-                            : [...selectedComponentIds, component.id])
-                        : (isAlreadySelected ? selectedComponentIds : [component.id]);
-
-                      const initMap = new Map<string, { x: number; y: number }>();
-                      components.forEach((c) => {
-                        if (targetIds.includes(c.id)) {
-                          initMap.set(c.id, { x: c.x, y: c.y });
-                        }
-                      });
-
-                      setGroupDragInitials(initMap);
-                      setGroupDragStartWorld(world);
-                      setDraggingCompId(component.id);
-                      setCompDragOffset({
-                        x: world.x - component.x,
-                        y: world.y - component.y,
-                      });
-                    }
-                  }}
-                >
-                  {isHighlighted && (
-                    <rect
-                      x="-6"
-                      y="-6"
-                      width={(component.properties?.width || 120) + 12}
-                      height={(component.properties?.height || 60) + 12}
-                      rx="6"
-                      fill="none"
-                      stroke="#38bdf8"
-                      strokeWidth="2.5"
-                      className="animate-pulse"
-                      filter="drop-shadow(0 0 8px #38bdf8)"
-                    />
-                  )}
-                  <SchematicTextBox
-                    component={component}
-                    isSelected={isSelected}
-                    theme={theme}
-                    zoom={viewport.zoom}
-                  />
-                </g>
-              );
+              return renderAnnotationItem(component);
             }
 
             const { cx, cy } = getComponentCenter(def, component.type);

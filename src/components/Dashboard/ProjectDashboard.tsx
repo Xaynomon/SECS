@@ -561,8 +561,14 @@ export const ProjectDashboard: React.FC = () => {
                     className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
                       isSelected
                         ? tier === 'Professional'
-                          ? 'bg-gradient-to-r from-amber-500 to-rose-600 text-white shadow-md shadow-amber-500/25'
+                          ? isDark
+                            ? 'bg-red-500/15 border border-red-500/30 text-red-500 ring-1 ring-red-500/40 shadow-sm'
+                            : 'bg-red-100 border border-red-200 text-red-600 ring-1 ring-red-400/50 shadow-sm'
                           : 'bg-sky-500 text-white shadow-md shadow-sky-500/20'
+                        : tier === 'Professional'
+                        ? isDark
+                          ? 'bg-red-500/15 border border-red-500/30 text-red-500 opacity-80 hover:opacity-100'
+                          : 'bg-red-100 border border-red-200 text-red-600 opacity-85 hover:opacity-100'
                         : isDark
                         ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-slate-800'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200 border border-slate-200'
@@ -573,8 +579,14 @@ export const ProjectDashboard: React.FC = () => {
                       className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
                         isSelected
                           ? tier === 'Professional'
-                            ? 'bg-amber-700/60 text-amber-100'
+                            ? isDark
+                              ? 'bg-red-500/20 text-red-500'
+                              : 'bg-red-200/80 text-red-600'
                             : 'bg-sky-600 text-white'
+                          : tier === 'Professional'
+                          ? isDark
+                            ? 'bg-red-500/20 text-red-500'
+                            : 'bg-red-200/80 text-red-600'
                           : isDark
                           ? 'bg-slate-800 text-slate-400'
                           : 'bg-slate-200 text-slate-600'
@@ -600,7 +612,9 @@ export const ProjectDashboard: React.FC = () => {
                       ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                       : template.tier === 'High-Level'
                       ? 'bg-purple-500/10 text-purple-300 border border-purple-500/20'
-                      : 'bg-gradient-to-r from-amber-500/20 to-rose-500/20 text-amber-300 border border-amber-500/40 shadow-sm shadow-amber-500/10';
+                      : isDark
+                      ? 'bg-red-500/15 border border-red-500/30 text-red-500'
+                      : 'bg-red-100 border border-red-200 text-red-600';
 
                   const hoverBorder =
                     template.tier === 'Basic'
@@ -609,7 +623,7 @@ export const ProjectDashboard: React.FC = () => {
                       ? 'hover:border-amber-500/50 hover:bg-amber-50/10'
                       : template.tier === 'High-Level'
                       ? 'hover:border-purple-500/50 hover:bg-purple-50/10'
-                      : 'hover:border-amber-400/60 hover:bg-amber-500/10';
+                      : 'hover:border-red-500/60 hover:bg-red-500/10';
 
                   const textHover =
                     template.tier === 'Basic'
@@ -618,7 +632,7 @@ export const ProjectDashboard: React.FC = () => {
                       ? isDark ? 'group-hover:text-amber-300' : 'group-hover:text-amber-700'
                       : template.tier === 'High-Level'
                       ? isDark ? 'group-hover:text-purple-300' : 'group-hover:text-purple-700'
-                      : isDark ? 'group-hover:text-amber-300' : 'group-hover:text-amber-600';
+                      : isDark ? 'group-hover:text-red-500' : 'group-hover:text-red-600';
 
                   const btnColor =
                     template.tier === 'Basic'
@@ -627,7 +641,7 @@ export const ProjectDashboard: React.FC = () => {
                       ? 'text-amber-500'
                       : template.tier === 'High-Level'
                       ? 'text-purple-400'
-                      : 'text-amber-400';
+                      : isDark ? 'text-red-500' : 'text-red-600';
 
                   return (
                     <div
@@ -645,7 +659,7 @@ export const ProjectDashboard: React.FC = () => {
                           <span
                             className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${badgeStyle}`}
                           >
-                            {template.tier}
+                            {template.tier === 'Professional' ? '🏆 Professional' : template.tier}
                           </span>
                           <span
                             className={`text-[10px] font-mono px-2 py-0.5 rounded-md ${

@@ -22,7 +22,12 @@ import {
   Lightbulb,
   ChevronDown,
   Type,
-  Code,
+  Shapes,
+  Circle,
+  Triangle,
+  Diamond,
+  Volume2,
+  VolumeX,
   Check,
   Loader2,
   Cloud,
@@ -37,6 +42,7 @@ export const TopToolbar: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showFileMenu, setShowFileMenu] = useState(false);
   const [showWireColorMenu, setShowWireColorMenu] = useState(false);
+  const [showShapeMenu, setShowShapeMenu] = useState(false);
 
   const {
     openDashboard,
@@ -45,8 +51,11 @@ export const TopToolbar: React.FC = () => {
     autoSaveStatus,
     saveCurrentProjectToDb,
     addTextBox,
+    addShape,
     theme,
     toggleTheme,
+    isSoundEnabled,
+    toggleSound,
     canUndo,
     canRedo,
     undo,
@@ -289,7 +298,7 @@ export const TopToolbar: React.FC = () => {
                 <button
                   onClick={() => {
                     setShowFileMenu(false);
-                    exportCircuitPng(components, wires, theme);
+                    exportCircuitPng(components, wires, theme, currentProjectName);
                   }}
                   className={`w-full text-left px-3 py-1.5 flex items-center justify-between transition ${
                     isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'
@@ -419,32 +428,104 @@ export const TopToolbar: React.FC = () => {
           <Type className="w-3.5 h-3.5" />
           <span className="hidden xl:inline">Text Note</span>
         </button>
+
+        {/* Add Shape Dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setShowShapeMenu((prev) => !prev)}
+            className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition ${
+              isDark
+                ? 'text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10'
+                : 'text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50'
+            }`}
+            title="Add Diagram Shape"
+          >
+            <Shapes className="w-3.5 h-3.5" />
+            <span className="hidden xl:inline">Add Shape</span>
+            <ChevronDown className="w-3 h-3 opacity-70" />
+          </button>
+
+          {showShapeMenu && (
+            <>
+              <div
+                className="fixed inset-0 z-30"
+                onClick={() => setShowShapeMenu(false)}
+              />
+              <div
+                className={`absolute left-0 top-full mt-1.5 w-44 rounded-lg border shadow-xl py-1 z-40 ${
+                  isDark
+                    ? 'bg-slate-900 border-slate-700 text-slate-200'
+                    : 'bg-white border-slate-200 text-slate-700'
+                }`}
+              >
+                {[
+                  { id: 'rectangle', label: 'Rectangle', Icon: Square },
+                  { id: 'rounded', label: 'Rounded Box', Icon: Shapes },
+                  { id: 'circle', label: 'Circle / Ellipse', Icon: Circle },
+                  { id: 'triangle', label: 'Triangle', Icon: Triangle },
+                  { id: 'diamond', label: 'Diamond', Icon: Diamond },
+                ].map(({ id, label, Icon }) => (
+                  <button
+                    key={id}
+                    onClick={() => {
+                      addShape(id);
+                      setShowShapeMenu(false);
+                    }}
+                    className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-xs transition ${
+                      isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* SECTION 3: SIMULATION MODE & PLAYBACK */}
       <div className="flex items-center gap-3">
-        {/* Two-Mode System: LOGICAL vs ANALOG */}
+        {/* Three-Mode Selector: LOGICAL vs ANALOG vs OFF (disables wire flow animation) */}
         <div
           className={`flex items-center p-0.5 rounded-lg border text-[11px] transition-colors ${
             isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'
           }`}
         >
-          {(['LOGICAL', 'ANALOG'] as SimulationMode[]).map((mode) => (
-            <button
-              key={mode}
-              onClick={() => setSimulationMode(mode)}
-              className={`px-2.5 py-1 rounded font-medium transition ${
-                simulationMode === mode
-                  ? 'bg-sky-500 text-slate-950 font-bold shadow'
-                  : isDark
-                  ? 'text-slate-400 hover:text-slate-200'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-              title={`Simulation Engine: ${mode} Mode`}
-            >
-              {mode}
-            </button>
-          ))}
+          {(['LOGICAL', 'ANALOG', 'OFF'] as SimulationMode[]).map((mode) => {
+            const isActive = simulationMode === mode;
+            const activeStyle =
+              mode === 'LOGICAL'
+                ? 'bg-blue-600 text-white font-bold shadow'
+                : mode === 'ANALOG'
+                ? 'bg-amber-600 text-white font-bold shadow'
+                : isDark
+                ? 'bg-slate-700 text-white font-bold shadow'
+                : 'bg-slate-600 text-white font-bold shadow';
+            const cycleOrder: SimulationMode[] = ['LOGICAL', 'ANALOG', 'OFF'];
+            const nextInCycle = cycleOrder[(cycleOrder.indexOf(mode) + 1) % cycleOrder.length];
+            return (
+              <button
+                key={mode}
+                onClick={() => setSimulationMode(isActive ? nextInCycle : mode)}
+                className={`px-2.5 py-1 rounded font-medium transition ${
+                  isActive
+                    ? activeStyle
+                    : isDark
+                    ? 'text-slate-400 hover:text-slate-200'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title={
+                  mode === 'OFF'
+                    ? 'Wire Flow Animation: OFF (Static Wires)'
+                    : `Simulation Engine: ${mode} Mode`
+                }
+              >
+                {mode}
+              </button>
+            );
+          })}
         </div>
 
         {/* Playback Controls */}
@@ -551,8 +632,8 @@ export const TopToolbar: React.FC = () => {
           }`}
           title="Microcontroller IDE & Serial Monitor"
         >
-          <Code className="w-3.5 h-3.5 text-teal-400" />
-          <span className="hidden lg:inline font-mono font-semibold">&lt;/&gt; Code</span>
+          <span className="font-mono font-bold text-teal-400">&lt;/&gt;</span>
+          <span className="hidden lg:inline font-semibold">Code</span>
         </button>
 
         {/* Compact Wire Color Dropdown Button */}
@@ -689,6 +770,23 @@ export const TopToolbar: React.FC = () => {
             <Lightbulb className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Sound Mute / Unmute Toggle */}
+        <button
+          onClick={toggleSound}
+          className={`p-1.5 rounded-lg border transition ml-1 ${
+            isSoundEnabled
+              ? isDark
+                ? 'border-slate-800 hover:bg-slate-800 text-emerald-400 hover:text-emerald-300'
+                : 'border-slate-200 hover:bg-slate-100 text-emerald-600 hover:text-emerald-700'
+              : isDark
+              ? 'border-slate-800 hover:bg-slate-800 text-rose-400 hover:text-rose-300'
+              : 'border-slate-200 hover:bg-slate-100 text-rose-500 hover:text-rose-600'
+          }`}
+          title={isSoundEnabled ? 'Sound Enabled (Click to Mute)' : 'Sound Muted (Click to Unmute)'}
+        >
+          {isSoundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+        </button>
 
         {/* Theme Toggle */}
         <button

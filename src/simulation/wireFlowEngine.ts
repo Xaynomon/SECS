@@ -1,9 +1,13 @@
 import { CircuitComponent, CircuitWire, SimulationMode } from '../types/circuit';
 import { ComponentRegistry } from '../registry/ComponentRegistry';
 import { COMPONENT_DEFINITIONS } from '../constants/componentLibrary';
+import { getTopologySignature, resetCircuitFlowCache } from '../utils/circuitFlow';
+
+export { getTopologySignature };
 
 export interface WireFlowVisualResult {
   hasFlow: boolean;
+  isFlowing: boolean;
   flowColor: string;
   flowDirection: 1 | -1;
   isProblematic: boolean;
@@ -15,8 +19,19 @@ export interface WireFlowVisualResult {
 // Active electricity timestamp map to bridge AC zero-crossings and prevent dash stutter
 const wireLastActiveTimestamp = new Map<string, number>();
 
+const EMPTY_DIRECTION_FIELD = new Map<string, 1 | -1>();
+let cachedPinRanksSig = '';
+let cachedPinRanks: Map<string, number> | null = null;
+let cachedDirectionFieldSig = '';
+let cachedDirectionField: Map<string, 1 | -1> | null = null;
+
 export function resetWireFlowEngineState(): void {
   wireLastActiveTimestamp.clear();
+  cachedPinRanksSig = '';
+  cachedPinRanks = null;
+  cachedDirectionFieldSig = '';
+  cachedDirectionField = null;
+  resetCircuitFlowCache();
 }
 
 /**
@@ -411,7 +426,24 @@ export function computeEnergizedPins(
  *    - pinRank = hopsFromDriver (e.g. BR1 DC+ = 0, C1+ = 1, R2 p1 = 2).
  *    - Flow moves away from driver: lower pinRank -> higher pinRank!
  */
+/**
+ * Computes component pin electrical depth ranks with topology-based memoization.
+ */
 export function computePinRanks(
+  components: CircuitComponent[],
+  wires: CircuitWire[]
+): Map<string, number> {
+  const sig = getTopologySignature(components, wires);
+  if (sig === cachedPinRanksSig && cachedPinRanks) {
+    return cachedPinRanks;
+  }
+  const computed = computePinRanksUncached(components, wires);
+  cachedPinRanksSig = sig;
+  cachedPinRanks = computed;
+  return computed;
+}
+
+function computePinRanksUncached(
   components: CircuitComponent[],
   wires: CircuitWire[]
 ): Map<string, number> {
@@ -722,13 +754,38 @@ export function computePinRanks(
  *
  * 100% constant across AC cycles, capacitor ripple, and drawing order!
  */
+/**
+ * Computes directed wire flow signs (+1 / -1) with instant OFF bypass and topology memoization.
+ */
 export function computeFlowDirectionField(
   components: CircuitComponent[],
   wires: CircuitWire[],
-  _mode: SimulationMode = 'ANALOG',
+  mode: SimulationMode = 'ANALOG',
+  _solvedState?: any
+): Map<string, 1 | -1> {
+  if (mode === 'OFF') {
+    return EMPTY_DIRECTION_FIELD;
+  }
+  const sig = `${mode}|${getTopologySignature(components, wires)}`;
+  if (sig === cachedDirectionFieldSig && cachedDirectionField) {
+    return cachedDirectionField;
+  }
+  const computed = computeFlowDirectionFieldUncached(components, wires, mode, _solvedState);
+  cachedDirectionFieldSig = sig;
+  cachedDirectionField = computed;
+  return computed;
+}
+
+function computeFlowDirectionFieldUncached(
+  components: CircuitComponent[],
+  wires: CircuitWire[],
+  mode: SimulationMode = 'ANALOG',
   _solvedState?: any
 ): Map<string, 1 | -1> {
   const result = new Map<string, 1 | -1>();
+  if (mode === 'OFF') {
+    return result;
+  }
   const pinRank = computePinRanks(components, wires);
 
   for (const wire of wires) {
@@ -757,6 +814,7 @@ export function computeFlowDirectionField(
  * - High (1) logic level produces Blue animated electricity flow (#3b82f6 / #60a5fa).
  * - Low (0) or High-Impedance ('Z') logic level is 100% static.
  * - Logic contention ('X') highlights wire red.
+ * - In OFF mode: forces hasFlow = false / isFlowing = false so every wire is static.
  */
 export function computeLogicalWireFlow(
   wire: CircuitWire,
@@ -764,8 +822,22 @@ export function computeLogicalWireFlow(
   _toComp?: CircuitComponent,
   wireState?: any,
   _compStates?: Map<string, any>,
-  directionField?: Map<string, 1 | -1>
+  directionField?: Map<string, 1 | -1>,
+  mode: SimulationMode = 'LOGICAL'
 ): WireFlowVisualResult {
+  if (mode === 'OFF') {
+    return {
+      hasFlow: false,
+      isFlowing: false,
+      flowColor: wire.color,
+      flowDirection: 1,
+      isProblematic: false,
+      isShortCircuit: false,
+      effectiveVoltage: 0.0,
+      effectiveCurrent: 0.0,
+    };
+  }
+
   const logicLevel = wireState?.logicLevel ?? wire.state?.logicLevel;
   const isShortCircuit = logicLevel === 'X';
   const hasFlow = !isShortCircuit && logicLevel === 1;
@@ -774,6 +846,7 @@ export function computeLogicalWireFlow(
 
   return {
     hasFlow,
+    isFlowing: hasFlow,
     flowColor: isShortCircuit ? '#ef4444' : hasFlow ? '#3b82f6' : wire.color,
     flowDirection,
     isProblematic: isShortCircuit,
@@ -793,6 +866,7 @@ export function computeLogicalWireFlow(
  * - Anti-stuttering: bridges AC sine zero-crossings & diode reverse-bias troughs via a 65ms hold window
  *   so CSS dash animation glides smoothly without hitching or resetting.
  * - Animates Warm Yellow (#fbbf24 / #fde047) at calm, steady speed.
+ * - In OFF mode: forces hasFlow = false / isFlowing = false so every wire is static.
  */
 export function computeAnalogWireFlow(
   wire: CircuitWire,
@@ -805,8 +879,21 @@ export function computeAnalogWireFlow(
   isSimRunning: boolean = true,
   precomputedEnergizedPins?: Set<string>,
   precomputedDirectionField?: Map<string, 1 | -1>,
-  simTimeMs?: number
+  simTimeMs?: number,
+  mode: SimulationMode = 'ANALOG'
 ): WireFlowVisualResult {
+  if (mode === 'OFF') {
+    return {
+      hasFlow: false,
+      isFlowing: false,
+      flowColor: wire.color,
+      flowDirection: 1,
+      isProblematic: false,
+      isShortCircuit: false,
+      effectiveVoltage: 0.0,
+      effectiveCurrent: 0.0,
+    };
+  }
   const wireCurrentA = isSimRunning ? Math.abs(wireCurrent ?? wire.state?.current ?? 0) : 0;
   const rawWireVoltage = wireVoltage ?? wire.state?.voltage ?? 0.0;
   const logicLevel = wire.state?.logicLevel;
@@ -914,6 +1001,7 @@ export function computeAnalogWireFlow(
 
   return {
     hasFlow,
+    isFlowing: hasFlow,
     flowColor,
     flowDirection,
     isProblematic,

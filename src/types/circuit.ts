@@ -102,7 +102,7 @@ export interface ViewportTransform {
   panY: number;
 }
 
-export type SimulationMode = 'LOGICAL' | 'ANALOG';
+export type SimulationMode = 'LOGICAL' | 'ANALOG' | 'OFF';
 export type SimulationStatus = 'stopped' | 'running' | 'paused';
 
 export interface DiagnosticTip {

@@ -46,3 +46,18 @@ Make sure you have Node.js installed.
    npm run dev
 
 4. Open http://localhost:5173 in your browser.
+
+---
+
+## Screenshots
+<img width="1862" height="1028" alt="Screenshot 2026-11-14 170438" src="https://github.com/user-attachments/assets/9324de8f-f082-4f74-b1f1-b7064c6c2abf" />
+<img width="1864" height="1030" alt="Screenshot 2026-11-14 170405" src="https://github.com/user-attachments/assets/d900b599-c0f0-43f2-870e-dc73525c6690" />
+<img width="1863" height="1030" alt="Screenshot 2026-11-14 165155" src="https://github.com/user-attachments/assets/81dae66f-0fb9-4edb-b42b-931d2e914b14" />
+<img width="1863" height="1030" alt="Screenshot 2026-11-14 164953" src="https://github.com/user-attachments/assets/63eb602a-5fc4-426d-aacd-15d70faacfa8" />
+<img width="1865" height="1030" alt="Screenshot 2026-11-14 164811" src="https://github.com/user-attachments/assets/9d049290-c427-4760-a9f8-df52d297f547" />
+<img width="1864" height="1031" alt="Screenshot 2026-11-14 164541" src="https://github.com/user-attachments/assets/1545cd40-ec33-4fea-910f-f9a8df161385" />
+<img width="1865" height="1079" alt="Screenshot 2026-11-14 163938" src="https://github.com/user-attachments/assets/8821682b-6659-46a3-a0e1-9276a09b25fd" />
+<img width="1866" height="1079" alt="Screenshot 2026-11-14 163806" src="https://github.com/user-attachments/assets/2e4ed5c2-8423-4ca2-abfa-b9fbaf6c7829" />
+
+
+

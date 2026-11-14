@@ -221,9 +221,26 @@ export const Oscilloscope: React.FC = () => {
     activeCursorDragRef.current = null;
   };
 
+  // Clear local sample buffer whenever a channel probe target changes
+  useEffect(() => {
+    sampleBufferRef.current = [];
+  }, [oscilloscope.ch1.target, oscilloscope.ch2.target]);
+
   // Sample collection loop on animationFrame
   useEffect(() => {
     if (!showOscilloscope) return;
+
+    const resolveProbeTarget = (target: ProbeTarget | null): ProbeTarget | null => {
+      if (target?.type === 'wire') {
+        const w = target.wireId ? wires.find((item) => item.id === target.wireId) : undefined;
+        const compId = w?.fromCompId ?? target.compId;
+        const pinId = w?.fromPinId ?? target.pinId;
+        if (compId && pinId) {
+          return { type: 'pin', compId, pinId, label: target.label };
+        }
+      }
+      return target;
+    };
 
     let animId: number;
     let lastSampleTime = performance.now();
@@ -237,8 +254,8 @@ export const Oscilloscope: React.FC = () => {
           const dt = now - lastSampleTime;
           if (dt >= 10) {
             lastSampleTime = now;
-            const v1 = getProbeVoltage(oscilloscope.ch1.target, components, wires, simulationMode);
-            const v2 = getProbeVoltage(oscilloscope.ch2.target, components, wires, simulationMode);
+            const v1 = getProbeVoltage(resolveProbeTarget(oscilloscope.ch1.target), components, wires, simulationMode);
+            const v2 = getProbeVoltage(resolveProbeTarget(oscilloscope.ch2.target), components, wires, simulationMode);
 
             // Append sample
             const buf = sampleBufferRef.current;
@@ -574,8 +591,9 @@ export const Oscilloscope: React.FC = () => {
           maxSearchIdx--;
         }
 
-        // Search backwards from maxSearchIdx down to 1 for the most recent trigger crossing
-        for (let i = maxSearchIdx; i >= 1; i--) {
+        // Search backwards from maxSearchIdx within recent 3x span for the most recent trigger crossing
+        const minSearchT = tLatest - totalSpanMs * 3;
+        for (let i = maxSearchIdx; i >= 1 && buf[i].t >= minSearchT; i--) {
           const vPrev = getTrigVal(buf[i - 1]);
           const vCurr = getTrigVal(buf[i]);
           const matched = isRising
@@ -836,14 +854,17 @@ export const Oscilloscope: React.FC = () => {
     }
 
     // 5. On-Screen Scale & Mode Overlays
+    const topBarY = 22;
+    const sidePadX = 14;
+
     // Top-Left: CH1 (Yellow #facc15)
     ctx.textAlign = 'left';
     ctx.font = 'bold 10px monospace';
     ctx.fillStyle = '#facc15';
     ctx.fillText(
       `CH1: ${oscilloscope.ch1.voltsPerDiv}V/div (${oscilloscope.ch1.coupling})`,
-      12,
-      18
+      sidePadX,
+      topBarY
     );
 
     // Top-Left Line 2: MATH Mode (Pink/Magenta #f472b6) or XY Mode (#22c55e)
@@ -851,30 +872,45 @@ export const Oscilloscope: React.FC = () => {
       ctx.fillStyle = '#f472b6';
       ctx.fillText(
         `MATH: ${mathOp} (${oscilloscope.ch1.voltsPerDiv}V/div)`,
-        12,
-        34
+        sidePadX,
+        topBarY + 16
       );
     } else if (displayMode === 'XY') {
       ctx.fillStyle = '#22c55e';
-      ctx.fillText('XY: CH1 (X) vs CH2 (Y)', 12, 34);
+      ctx.fillText('XY: CH1 (X) vs CH2 (Y)', sidePadX, topBarY + 16);
     }
 
-    // Top-Center: Trigger / Pause Status Badge
-    ctx.textAlign = 'center';
+    // Top-Center: Trigger / Pause Status Badge with clean backdrop pill
     ctx.font = 'bold 10px monospace';
+    let statusText = '⏳ AUTO';
+    let statusColor = '#f59e0b';
     if (oscilloscope.isPaused) {
-      ctx.fillStyle = '#ef4444';
-      ctx.fillText('🔴 STOP', width / 2, 18);
+      statusText = '🔴 STOP';
+      statusColor = '#ef4444';
     } else if (isStationaryTrig) {
-      ctx.fillStyle = '#22c55e';
-      ctx.fillText('🟢 TRIG\'D', width / 2, 18);
+      statusText = "🟢 TRIG'D";
+      statusColor = '#22c55e';
     } else if (triggerLockMode === 'roll') {
-      ctx.fillStyle = '#06b6d4';
-      ctx.fillText('🌊 ROLL', width / 2, 18);
-    } else {
-      ctx.fillStyle = '#f59e0b';
-      ctx.fillText('⏳ AUTO', width / 2, 18);
+      statusText = '🌊 ROLL';
+      statusColor = '#06b6d4';
     }
+    const badgeMetrics = ctx.measureText(statusText);
+    const badgeW = badgeMetrics.width + 14;
+    const badgeH = 16;
+    const badgeX = width / 2 - badgeW / 2;
+    const badgeY = topBarY - 12;
+    ctx.fillStyle = 'rgba(6, 10, 18, 0.82)';
+    ctx.beginPath();
+    if (typeof ctx.roundRect === 'function') {
+      ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 4);
+    } else {
+      ctx.rect(badgeX, badgeY, badgeW, badgeH);
+    }
+    ctx.fill();
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = statusColor;
+    ctx.fillText(statusText, width / 2, topBarY);
 
     // Top-Right: CH2 (Cyan #38bdf8), Right-Aligned
     ctx.textAlign = 'right';
@@ -882,8 +918,8 @@ export const Oscilloscope: React.FC = () => {
     ctx.fillStyle = '#38bdf8';
     ctx.fillText(
       `CH2: ${oscilloscope.ch2.voltsPerDiv}V/div (${oscilloscope.ch2.coupling})`,
-      width - 12,
-      18
+      width - sidePadX,
+      topBarY
     );
 
     // Bottom-Center: Timebase & Trigger Mode
@@ -926,7 +962,13 @@ export const Oscilloscope: React.FC = () => {
   wires.forEach((w, idx) => {
     allSelectableTargets.push({
       label: `Wire #${idx + 1} (${w.color})`,
-      target: { type: 'wire', wireId: w.id, label: `Wire #${idx + 1}` },
+      target: {
+        type: 'wire',
+        wireId: w.id,
+        compId: w.fromCompId,
+        pinId: w.fromPinId,
+        label: `Wire #${idx + 1}`,
+      },
     });
   });
 

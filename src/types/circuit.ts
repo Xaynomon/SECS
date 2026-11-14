@@ -1,14 +1,16 @@
 export type ComponentCategory =
   | 'power'
-  | 'passives'
-  | 'semiconductors'
+  | 'inputs'
+  | 'outputs'
   | 'logic'
+  | 'passives'
   | 'mcu'
+  | 'instruments'
+  // Legacy aliases retained for backwards compatibility
+  | 'semiconductors'
   | 'sensors'
   | 'actuators'
-  | 'outputs'
-  | 'annotations'
-  | 'instruments';
+  | 'annotations';
 
 export type PinType = 'input' | 'output' | 'bidirectional' | 'power' | 'ground' | 'passive';
 

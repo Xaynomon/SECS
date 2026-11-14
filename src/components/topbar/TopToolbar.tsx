@@ -23,9 +23,6 @@ import {
   ChevronDown,
   Type,
   Shapes,
-  Circle,
-  Triangle,
-  Diamond,
   Volume2,
   VolumeX,
   Check,
@@ -38,11 +35,72 @@ import { exportBomCsv, exportCircuitPng, exportCircuitSvg } from '../../utils/ex
 import { saveProjectToFile, validateCircuitFile } from '../../utils/fileIo';
 import { SimulationMode } from '../../types/circuit';
 
+const SHAPE_MENU_ITEMS: Array<{ id: string; label: string; glyph: React.ReactNode }> = [
+  {
+    id: 'rectangle',
+    label: 'Rectangle',
+    glyph: <rect x={2} y={3} width={12} height={10} rx={1} />,
+  },
+  {
+    id: 'rounded',
+    label: 'Rounded Box',
+    glyph: <rect x={2} y={3} width={12} height={10} rx={3.5} />,
+  },
+  {
+    id: 'circle',
+    label: 'Circle / Ellipse',
+    glyph: <circle cx={8} cy={8} r={5.5} />,
+  },
+  {
+    id: 'hollow-circle',
+    label: 'Hollow Circle (Ring)',
+    glyph: (
+      <path
+        d="M8 2.5A5.5 5.5 0 1 0 8 13.5A5.5 5.5 0 1 0 8 2.5Z M8 5.2A2.8 2.8 0 1 1 8 10.8A2.8 2.8 0 1 1 8 5.2Z"
+        fillRule="evenodd"
+      />
+    ),
+  },
+  {
+    id: 'semi-sphere',
+    label: 'Semi-Sphere (Dome)',
+    glyph: <path d="M2 12 A6 8 0 0 1 14 12 Z" />,
+  },
+  {
+    id: 'triangle',
+    label: 'Equilateral Triangle',
+    glyph: <polygon points="8,2.5 14,13 2,13" />,
+  },
+  {
+    id: 'right-triangle',
+    label: 'Right-Angle Triangle',
+    glyph: <polygon points="2.5,2.5 13.5,13 2.5,13" />,
+  },
+  {
+    id: 'diamond',
+    label: 'Diamond',
+    glyph: <polygon points="8,2 14,8 8,14 2,8" />,
+  },
+  {
+    id: 'arrow',
+    label: 'Block Arrow',
+    glyph: <polygon points="1.5,5.5 9.5,5.5 9.5,2.5 14.5,8 9.5,13.5 9.5,10.5 1.5,10.5" />,
+  },
+  {
+    id: 'cloud',
+    label: 'Cloud Shape',
+    glyph: (
+      <path d="M4.2 12.5 C1.8 12.5 1.5 9.6 3.1 8.5 C2.6 6.1 4.5 4.8 6.1 5.7 C6.9 3.1 10.2 3.2 10.9 5.8 C12.4 5.3 13.9 6.9 13.1 8.6 C14.6 9.6 14.3 12.5 11.8 12.5 Z" />
+    ),
+  },
+];
+
 export const TopToolbar: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showFileMenu, setShowFileMenu] = useState(false);
   const [showWireColorMenu, setShowWireColorMenu] = useState(false);
   const [showShapeMenu, setShowShapeMenu] = useState(false);
+  const [includeExportBg, setIncludeExportBg] = useState(true);
 
   const {
     openDashboard,
@@ -296,9 +354,42 @@ export const TopToolbar: React.FC = () => {
                 />
 
                 <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIncludeExportBg((prev) => !prev);
+                  }}
+                  className={`w-full text-left px-3 py-1.5 flex items-center justify-between transition ${
+                    isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'
+                  }`}
+                  title="Toggle solid canvas background vs transparent background for PNG/SVG exports"
+                >
+                  <span className="text-[11px] font-medium">Include Background</span>
+                  <span
+                    className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                      includeExportBg
+                        ? isDark
+                          ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
+                          : 'bg-sky-100 text-sky-700 border border-sky-200'
+                        : isDark
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                        : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                    }`}
+                  >
+                    {includeExportBg ? 'ON' : 'Transparent'}
+                  </span>
+                </button>
+
+                <button
                   onClick={() => {
                     setShowFileMenu(false);
-                    exportCircuitPng(components, wires, theme, currentProjectName);
+                    exportCircuitPng(
+                      components,
+                      wires,
+                      theme,
+                      currentProjectName,
+                      includeExportBg
+                    );
                   }}
                   className={`w-full text-left px-3 py-1.5 flex items-center justify-between transition ${
                     isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'
@@ -314,7 +405,13 @@ export const TopToolbar: React.FC = () => {
                 <button
                   onClick={() => {
                     setShowFileMenu(false);
-                    exportCircuitSvg(components, wires, theme);
+                    exportCircuitSvg(
+                      components,
+                      wires,
+                      theme,
+                      currentProjectName,
+                      includeExportBg
+                    );
                   }}
                   className={`w-full text-left px-3 py-1.5 flex items-center justify-between transition ${
                     isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'
@@ -452,19 +549,13 @@ export const TopToolbar: React.FC = () => {
                 onClick={() => setShowShapeMenu(false)}
               />
               <div
-                className={`absolute left-0 top-full mt-1.5 w-44 rounded-lg border shadow-xl py-1 z-40 ${
+                className={`absolute left-0 top-full mt-1.5 w-48 rounded-lg border shadow-xl py-1 z-40 ${
                   isDark
                     ? 'bg-slate-900 border-slate-700 text-slate-200'
                     : 'bg-white border-slate-200 text-slate-700'
                 }`}
               >
-                {[
-                  { id: 'rectangle', label: 'Rectangle', Icon: Square },
-                  { id: 'rounded', label: 'Rounded Box', Icon: Shapes },
-                  { id: 'circle', label: 'Circle / Ellipse', Icon: Circle },
-                  { id: 'triangle', label: 'Triangle', Icon: Triangle },
-                  { id: 'diamond', label: 'Diamond', Icon: Diamond },
-                ].map(({ id, label, Icon }) => (
+                {SHAPE_MENU_ITEMS.map(({ id, label, glyph }) => (
                   <button
                     key={id}
                     onClick={() => {
@@ -475,8 +566,18 @@ export const TopToolbar: React.FC = () => {
                       isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'
                     }`}
                   >
-                    <Icon className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>{label}</span>
+                    <svg
+                      viewBox="0 0 16 16"
+                      className="w-3.5 h-3.5 shrink-0 text-indigo-400"
+                      fill="currentColor"
+                      fillOpacity={0.22}
+                      stroke="currentColor"
+                      strokeWidth={1.3}
+                      strokeLinejoin="round"
+                    >
+                      {glyph}
+                    </svg>
+                    <span className="truncate">{label}</span>
                   </button>
                 ))}
               </div>

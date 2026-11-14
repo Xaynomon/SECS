@@ -3,14 +3,12 @@ import { ComponentDefinition } from '../types/componentRegistry';
 
 export const COMPONENT_CATEGORIES = [
   { id: 'power', label: 'Power & Sources', icon: 'Zap' },
-  { id: 'passives', label: 'Passives', icon: 'Layers' },
-  { id: 'semiconductors', label: 'Semiconductors', icon: 'Cpu' },
-  { id: 'logic', label: 'Logic Gates', icon: 'Binary' },
-  { id: 'mcu', label: 'Microcontrollers', icon: 'Microchip' },
-  { id: 'sensors', label: 'Sensors (Inputs)', icon: 'Activity' },
-  { id: 'outputs', label: 'Actuators & Outputs', icon: 'Lightbulb' },
-  { id: 'instruments', label: 'Virtual Instruments', icon: 'Gauge' },
-  { id: 'annotations', label: 'Annotations & Notes', icon: 'Type' },
+  { id: 'inputs', label: 'Inputs', icon: 'Activity' },
+  { id: 'outputs', label: 'Outputs', icon: 'Lightbulb' },
+  { id: 'logic', label: 'Logics', icon: 'Binary' },
+  { id: 'passives', label: 'Passive', icon: 'Layers' },
+  { id: 'mcu', label: 'Controller & Processor', icon: 'Microchip' },
+  { id: 'instruments', label: 'Instruments & Other', icon: 'Gauge' },
 ] as const;
 
 // Create proxy dictionary to support legacy COMPONENT_DEFINITIONS[id] access

@@ -1167,7 +1167,9 @@ export const CircuitCanvas: React.FC = () => {
               attachProbe(activeProbePicker.instrument, activeProbePicker.channelId, {
                 type: 'wire',
                 wireId: wire.id,
-                label: `Wire #${wire.id.slice(-4)}`,
+                compId: wire.fromCompId,
+                pinId: wire.fromPinId,
+                label: `Wire (${fromComp.label || fromComp.id}:${wire.fromPinId} → ${toComp.label || toComp.id}:${wire.toPinId})`,
               });
               return;
             }

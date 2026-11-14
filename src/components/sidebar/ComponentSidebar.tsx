@@ -8,12 +8,10 @@ import {
   PanelLeftOpen,
   Zap,
   Layers,
-  Cpu,
   Binary,
   Microchip,
   Activity,
   Lightbulb,
-  Type,
   Gauge,
 } from 'lucide-react';
 import { COMPONENT_CATEGORIES } from '../../constants/componentLibrary';
@@ -24,15 +22,17 @@ import { useCircuitStore } from '../../store/useCircuitStore';
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
   power: Zap,
-  passives: Layers,
-  semiconductors: Cpu,
-  logic: Binary,
-  mcu: Microchip,
-  sensors: Activity,
+  inputs: Activity,
   outputs: Lightbulb,
+  logic: Binary,
+  passives: Layers,
+  mcu: Microchip,
   instruments: Gauge,
-  annotations: Type,
 };
+
+const CATEGORY_LABEL_MAP: Record<string, string> = Object.fromEntries(
+  COMPONENT_CATEGORIES.map((c) => [c.id, c.label.toLowerCase()])
+);
 
 export const ComponentSidebar: React.FC = () => {
   const { theme, addComponent } = useCircuitStore();
@@ -50,14 +50,12 @@ export const ComponentSidebar: React.FC = () => {
   } | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
     power: true,
-    passives: true,
-    semiconductors: true,
-    logic: true,
-    mcu: true,
-    sensors: true,
+    inputs: true,
     outputs: true,
+    logic: true,
+    passives: true,
+    mcu: true,
     instruments: true,
-    annotations: true,
   });
 
   const toggleCategory = (catId: string) => {
@@ -76,7 +74,9 @@ export const ComponentSidebar: React.FC = () => {
       const matchName = comp.name.toLowerCase().includes(q);
       const matchDesc = comp.description.toLowerCase().includes(q);
       const matchTags = (comp.tags || []).some((tag) => tag.toLowerCase().includes(q));
-      const matchCat = comp.category.toLowerCase().includes(q);
+      const matchCat =
+        comp.category.toLowerCase().includes(q) ||
+        (CATEGORY_LABEL_MAP[comp.category] || '').includes(q);
       return matchName || matchDesc || matchTags || matchCat;
     });
   }, [searchQuery]);
@@ -89,21 +89,18 @@ export const ComponentSidebar: React.FC = () => {
   const componentsByCategory = useMemo(() => {
     const map: Record<string, ComponentDefinition[]> = {
       power: [],
-      passives: [],
-      semiconductors: [],
-      logic: [],
-      mcu: [],
-      sensors: [],
+      inputs: [],
       outputs: [],
+      logic: [],
+      passives: [],
+      mcu: [],
       instruments: [],
-      annotations: [],
     };
 
     filteredComponents.forEach((comp) => {
-      if (!map[comp.category]) {
-        map[comp.category] = [];
+      if (map[comp.category]) {
+        map[comp.category].push(comp);
       }
-      map[comp.category].push(comp);
     });
 
     return map;
@@ -210,19 +207,21 @@ export const ComponentSidebar: React.FC = () => {
                             addComponent(compId);
                             setShowQuickSearch(false);
                           }}
-                          className={`group flex items-center gap-2 p-1.5 rounded-lg border cursor-grab active:cursor-grabbing transition ${
+                          className={`group flex items-center gap-2.5 p-1.5 rounded-xl border cursor-grab active:cursor-grabbing transition ${
                             isDark
                               ? 'bg-slate-800/60 hover:bg-slate-800 border-transparent hover:border-slate-700'
                               : 'bg-white hover:bg-sky-50 hover:border-sky-300 border-slate-200/90 shadow-sm'
                           }`}
                           title="Click to place, or drag directly onto canvas"
                         >
-                          <ComponentThumbnail definition={comp as any} theme={theme} />
+                          <ComponentThumbnail definition={comp as any} theme={theme} size="lg" />
                           <div className="min-w-0 flex-1">
                             <div className="text-xs font-semibold truncate group-hover:text-sky-400">
                               {comp.name}
                             </div>
-                            <div className="text-[10px] text-slate-400 truncate">
+                            <div className={`text-[10px] line-clamp-2 leading-snug ${
+                              isDark ? 'text-slate-400' : 'text-slate-500'
+                            }`}>
                               {comp.description}
                             </div>
                           </div>
@@ -299,7 +298,7 @@ export const ComponentSidebar: React.FC = () => {
                             : 'bg-white hover:bg-sky-50 border-slate-200 hover:border-sky-400'
                         }`}
                       >
-                        <ComponentThumbnail definition={comp as any} theme={theme} />
+                        <ComponentThumbnail definition={comp as any} theme={theme} size="sm" />
                       </button>
                     </div>
                   );
@@ -500,15 +499,15 @@ export const ComponentSidebar: React.FC = () => {
                           }
                           addComponent(compId);
                         }}
-                        className={`group flex items-center gap-2.5 p-1.5 rounded-lg border cursor-grab active:cursor-grabbing transition ${
+                        className={`group flex items-center gap-3 p-1.5 rounded-xl border cursor-grab active:cursor-grabbing transition ${
                           isDark
                             ? 'bg-slate-800/60 hover:bg-slate-800 border-transparent hover:border-slate-700'
                             : 'bg-white hover:bg-sky-50 hover:border-sky-300 border-slate-200/90 shadow-sm'
                         }`}
                         title="Click to place, or drag directly onto canvas"
                       >
-                        <ComponentThumbnail definition={comp as any} theme={theme} />
-                        <div className="min-w-0 flex-1">
+                        <ComponentThumbnail definition={comp as any} theme={theme} size="lg" />
+                        <div className="min-w-0 flex-1 py-0.5">
                           <div
                             className={`text-xs font-semibold truncate ${
                               isDark
@@ -519,7 +518,7 @@ export const ComponentSidebar: React.FC = () => {
                             {comp.name}
                           </div>
                           <div
-                            className={`text-[10px] truncate leading-snug ${
+                            className={`text-[10px] line-clamp-2 leading-snug mt-0.5 ${
                               isDark ? 'text-slate-400' : 'text-slate-500'
                             }`}
                           >

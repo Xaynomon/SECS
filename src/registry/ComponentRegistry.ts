@@ -4,6 +4,126 @@ import {
   PinDirection,
 } from '../types/componentRegistry';
 
+const CANONICAL_DISPLAY_ORDER: string[] = [
+  // 1. Power & Sources
+  'dc-source',
+  'ac-source',
+  'vcc',
+  'gnd',
+  'coin-cell',
+  'builtin_solar_panel',
+  'builtin_dcdc_converter',
+  'builtin_reg_7805',
+  'builtin_bridge_rectifier',
+  // 2. Inputs
+  'pushbutton',
+  'toggle-switch',
+  'builtin_dip_switch_4',
+  'potentiometer',
+  'builtin_numpad',
+  'builtin_joystick',
+  'light-sensor',
+  'temp-sensor',
+  'builtin_humidity_sensor',
+  'builtin_soil_moisture',
+  'builtin_gas_sensor',
+  'builtin_motion_sensor',
+  'ultrasonic',
+  'builtin_accelerometer',
+  'builtin_hall_sensor',
+  'builtin_vibration_sensor',
+  'builtin_ir_rx',
+  // 3. Outputs
+  'led-red',
+  'led-green',
+  'led-blue',
+  'led-yellow',
+  'led-rgb',
+  'builtin_traffic_light',
+  'builtin_filament_bulb',
+  'display-7seg',
+  'builtin_led_bar_graph',
+  'builtin_oled_display',
+  'builtin_lcd_16x2',
+  'buzzer',
+  'builtin_speaker',
+  'dc-fan',
+  'builtin_dc_motor',
+  'builtin_servo_motor',
+  'builtin_stepper_motor',
+  'builtin_water_pump',
+  'builtin_solenoid',
+  'relay',
+  'builtin_ir_tx',
+  // 4. Logics
+  'gate-and',
+  'gate-or',
+  'gate-not',
+  'gate-nand',
+  'gate-nor',
+  'gate-xor',
+  'gate-xnor',
+  'ic-555',
+  'builtin_d_flipflop',
+  'builtin_jk_flipflop',
+  'builtin_counter_4bit',
+  'builtin_shift_register',
+  'builtin_bcd_decoder',
+  'builtin_mux_4to1',
+  'builtin_comparator',
+  'opamp',
+  // 5. Passive
+  'resistor',
+  'capacitor-ceramic',
+  'capacitor-electrolytic',
+  'inductor',
+  'builtin_fuse',
+  'diode',
+  'zener-diode',
+  'transistor-npn',
+  'builtin_pnp',
+  'mosfet-n',
+  'builtin_pmos',
+  'builtin_optocoupler',
+  'builtin_hbridge',
+  // 6. Controller & Processor
+  'arduino-uno',
+  'esp32',
+  'pico',
+  'builtin_cpu_8bit',
+  // 7. Instruments & Other
+  'multimeter',
+  'oscilloscope',
+  'logic-analyzer',
+  'builtin_rf_radio',
+  'builtin_sd_card',
+  'textbox',
+  'shape',
+];
+
+const DISPLAY_ORDER_INDEX = new Map<string, number>(
+  CANONICAL_DISPLAY_ORDER.map((id, idx) => [id, idx])
+);
+
+const CATEGORY_ALIAS_MAP: Record<string, ComponentRegistryCategory> = {
+  power: 'power',
+  'power & sources': 'power',
+  inputs: 'inputs',
+  sensors: 'inputs',
+  outputs: 'outputs',
+  actuators: 'outputs',
+  logic: 'logic',
+  logics: 'logic',
+  passives: 'passives',
+  passive: 'passives',
+  semiconductors: 'passives',
+  mcu: 'mcu',
+  'controller & processor': 'mcu',
+  instruments: 'instruments',
+  'instruments & other': 'instruments',
+  annotations: 'instruments',
+};
+
 class ComponentRegistryClass {
   private registry: Map<string, ComponentDefinition> = new Map();
   private aliasMap: Map<string, string> = new Map();
@@ -59,19 +179,26 @@ class ComponentRegistryClass {
   }
 
   /**
-   * Returns all registered component definitions
+   * Returns all registered component definitions ordered by official category sequence
    */
   public getAllComponents(): ComponentDefinition[] {
-    return Array.from(this.registry.values());
+    return Array.from(this.registry.values()).sort((a, b) => {
+      const idxA = DISPLAY_ORDER_INDEX.get(a.id) ?? 9999;
+      const idxB = DISPLAY_ORDER_INDEX.get(b.id) ?? 9999;
+      return idxA - idxB;
+    });
   }
 
   /**
    * Filters registered components by category
    */
-  public filterByCategory(category: ComponentRegistryCategory | 'actuators'): ComponentDefinition[] {
-    // Normalize legacy 'actuators' to 'outputs'
-    const targetCategory = category === 'actuators' ? 'outputs' : category;
-    return this.getAllComponents().filter((c) => c.category === targetCategory);
+  public filterByCategory(
+    category: ComponentRegistryCategory | 'actuators' | string
+  ): ComponentDefinition[] {
+    const normalized =
+      CATEGORY_ALIAS_MAP[category.toLowerCase().trim()] ||
+      (category as ComponentRegistryCategory);
+    return this.getAllComponents().filter((c) => c.category === normalized);
   }
 
   /**
@@ -100,9 +227,9 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'shape',
       name: 'Diagram Shape',
-      category: 'annotations',
-      description: 'Customizable background container shape (Rectangle, Rounded, Circle, Triangle, Diamond) for schematic grouping',
-      tags: ['shape', 'rectangle', 'rounded', 'circle', 'triangle', 'diamond', 'box', 'frame', 'group', 'annotation'],
+      category: 'instruments',
+      description: 'Customizable background container & annotation shape (10 geometries, 90° rotation) for schematic grouping',
+      tags: ['shape', 'rectangle', 'rounded', 'circle', 'hollow-circle', 'ring', 'semi-sphere', 'dome', 'triangle', 'right-triangle', 'diamond', 'arrow', 'cloud', 'box', 'frame', 'group', 'annotation'],
       width: 200,
       height: 140,
       origin: 'top-left',
@@ -117,6 +244,7 @@ class ComponentRegistryClass {
         shapeType: 'rectangle',
         width: 200,
         height: 140,
+        innerRadiusRatio: 0.55,
         fillColor: '#38bdf8',
         fillOpacity: 0.08,
         strokeColor: '#38bdf8',
@@ -133,12 +261,18 @@ class ComponentRegistryClass {
             { label: 'Rectangle', value: 'rectangle' },
             { label: 'Rounded Box', value: 'rounded' },
             { label: 'Circle / Ellipse', value: 'circle' },
-            { label: 'Triangle', value: 'triangle' },
+            { label: 'Hollow Circle (Ring)', value: 'hollow-circle' },
+            { label: 'Semi-Sphere (Dome)', value: 'semi-sphere' },
+            { label: 'Equilateral Triangle', value: 'triangle' },
+            { label: 'Right-Angle Triangle', value: 'right-triangle' },
             { label: 'Diamond', value: 'diamond' },
+            { label: 'Block Arrow', value: 'arrow' },
+            { label: 'Cloud Shape', value: 'cloud' },
           ],
         },
         { key: 'width', label: 'Width', type: 'number', unit: 'px', min: 40, max: 1200, step: 20 },
         { key: 'height', label: 'Height', type: 'number', unit: 'px', min: 40, max: 1200, step: 20 },
+        { key: 'innerRadiusRatio', label: 'Inner Ring Ratio', type: 'number', min: 0.2, max: 0.85, step: 0.05 },
         { key: 'fillColor', label: 'Fill Color', type: 'color' },
         { key: 'fillOpacity', label: 'Fill Opacity', type: 'number', min: 0, max: 1, step: 0.05 },
         { key: 'strokeColor', label: 'Stroke Color', type: 'color' },
@@ -412,7 +546,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'potentiometer',
       name: 'Potentiometer',
-      category: 'passives',
+      category: 'inputs',
       description: '3-Terminal variable resistor with adjustable wiper dial',
       tags: ['pot', 'variable', 'resistor', 'trimmer', 'wiper', 'analog'],
       width: 80,
@@ -436,12 +570,12 @@ class ComponentRegistryClass {
     });
 
     // ==========================================
-    // 3. SEMICONDUCTORS
+    // 3. DISCRETE PASSIVE SEMICONDUCTORS
     // ==========================================
     this.registerComponent({
       id: 'diode',
       name: 'Diode (1N4007 / 1N4148)',
-      category: 'semiconductors',
+      category: 'passives',
       description: 'PN junction semiconductor diode for rectification',
       tags: ['diode', 'rectifier', '1n4007', '1n4148', 'semiconductor'],
       width: 80,
@@ -465,7 +599,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'zener-diode',
       name: 'Zener Diode',
-      category: 'semiconductors',
+      category: 'passives',
       description: 'Voltage regulator diode with controlled reverse breakdown',
       tags: ['zener', 'diode', 'regulator', 'breakdown', 'reference'],
       width: 80,
@@ -489,7 +623,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'transistor-npn',
       name: 'NPN Transistor (2N2222)',
-      category: 'semiconductors',
+      category: 'passives',
       description: 'Bipolar junction transistor for switching and amplification',
       tags: ['npn', 'bjt', 'transistor', '2n2222', 'switch', 'amplifier'],
       width: 80,
@@ -515,7 +649,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'mosfet-n',
       name: 'N-Channel MOSFET',
-      category: 'semiconductors',
+      category: 'passives',
       description: 'Voltage-controlled switch with ultra-low ON resistance',
       tags: ['mosfet', 'n-channel', 'fet', 'transistor', 'power', 'switch'],
       width: 80,
@@ -541,7 +675,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'opamp',
       name: 'Operational Amplifier (LM358)',
-      category: 'semiconductors',
+      category: 'logic',
       description: 'High gain differential operational amplifier',
       tags: ['opamp', 'amplifier', 'lm358', 'comparator', 'analog'],
       width: 80,
@@ -724,7 +858,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'display-7seg',
       name: '7-Segment Display',
-      category: 'logic',
+      category: 'outputs',
       description: 'Standard 7-segment LED numeric display with decimal point',
       tags: ['display', '7seg', 'led', 'counter', 'digits'],
       width: 80,
@@ -940,12 +1074,12 @@ class ComponentRegistryClass {
     });
 
     // ==========================================
-    // 6. SENSORS (Interactive Inputs)
+    // 6. INPUTS & SENSORS
     // ==========================================
     this.registerComponent({
       id: 'pushbutton',
       name: 'Pushbutton (Tactile Switch)',
-      category: 'sensors',
+      category: 'inputs',
       description: 'Momentary normally open push-to-make tactile button',
       tags: ['button', 'push', 'switch', 'tactile', 'input', 'momentary'],
       width: 80,
@@ -964,7 +1098,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'toggle-switch',
       name: 'Toggle Switch (SPDT)',
-      category: 'sensors',
+      category: 'inputs',
       description: 'Single pole double throw latching toggle switch',
       tags: ['switch', 'toggle', 'spdt', 'input', 'latch'],
       width: 80,
@@ -994,7 +1128,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'temp-sensor',
       name: 'Temperature Sensor (TMP36)',
-      category: 'sensors',
+      category: 'inputs',
       description: 'Analog linear temperature sensor (10mV/°C, 500mV @ 0°C)',
       tags: ['temp', 'temperature', 'tmp36', 'ntc', 'sensor', 'analog'],
       width: 80,
@@ -1016,7 +1150,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'light-sensor',
       name: 'Light Sensor (LDR Photoresistor)',
-      category: 'sensors',
+      category: 'inputs',
       description: 'Cadmium-sulfide photoresistor whose resistance decreases with light',
       tags: ['ldr', 'light', 'photoresistor', 'lux', 'sensor'],
       width: 80,
@@ -1038,7 +1172,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'ultrasonic',
       name: 'Ultrasonic Distance Sensor (HC-SR04)',
-      category: 'sensors',
+      category: 'inputs',
       description: 'Sonar distance measuring module (2cm to 400cm)',
       tags: ['ultrasonic', 'sonar', 'distance', 'hcsr04', 'range', 'sensor'],
       width: 100,
@@ -1177,12 +1311,12 @@ class ComponentRegistryClass {
     });
 
     // ==========================================
-    // 8. ANNOTATIONS (Text Box / Notes)
+    // 8. ANNOTATIONS (Text Box / Notes -> Instruments & Other)
     // ==========================================
     this.registerComponent({
       id: 'textbox',
       name: 'Text Note / Annotation',
-      category: 'annotations',
+      category: 'instruments',
       description: 'Resizable schematic text note for documentation and labels',
       tags: ['text', 'label', 'note', 'comment', 'annotation', 'sticky'],
       width: 160,
@@ -1278,7 +1412,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'builtin_humidity_sensor',
       name: 'Humidity Sensor (DHT22)',
-      category: 'sensors',
+      category: 'inputs',
       description: 'Capacitive relative humidity sensor module (0-100% RH) with digital threshold and analog proportional output',
       tags: ['humidity', 'dht22', 'dht11', 'moisture', 'rh', 'water', 'weather', 'sensor'],
       width: 80,
@@ -1351,7 +1485,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'builtin_motion_sensor',
       name: 'PIR Motion Sensor (HC-SR501)',
-      category: 'sensors',
+      category: 'inputs',
       description: 'Pyroelectric infrared motion detector with Fresnel dome lens and configurable trigger hold time',
       tags: ['pir', 'motion', 'infrared', 'hcsr501', 'security', 'presence', 'sensor'],
       width: 80,
@@ -1376,7 +1510,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'builtin_gas_sensor',
       name: 'Gas / Smoke Sensor (MQ-2)',
-      category: 'sensors',
+      category: 'inputs',
       description: 'Combustible gas & smoke concentration detector (50-2000 PPM) with Digital (DO) and Analog (AO) outputs',
       tags: ['gas', 'smoke', 'mq2', 'ppm', 'lpg', 'methane', 'alarm', 'sensor'],
       width: 100,
@@ -1402,7 +1536,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'builtin_accelerometer',
       name: '3-Axis Accelerometer (ADXL335)',
-      category: 'sensors',
+      category: 'inputs',
       description: 'MEMS 3-axis tilt and acceleration breakout board (-3g to +3g) with X, Y, Z analog/digital outputs',
       tags: ['accelerometer', 'adxl335', 'gy61', 'tilt', 'imu', 'gravity', 'xyz', 'sensor'],
       width: 120,
@@ -1565,7 +1699,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'builtin_sd_card',
       name: 'MicroSD Card Reader Module',
-      category: 'outputs',
+      category: 'instruments',
       description: 'SPI MicroSD flash storage breakout board with interactive virtual file system, log.csv telemetry & PC file download',
       tags: ['sd', 'microsd', 'storage', 'card', 'spi', 'file', 'logger', 'data'],
       width: 120,
@@ -1636,7 +1770,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'builtin_numpad',
       name: '4x4 Matrix Membrane Numpad',
-      category: 'sensors',
+      category: 'inputs',
       description: '16-Key interactive membrane matrix keypad (0-9, A-D, *, #) with Row/Col pins, active OUT signal, and MCU Keypad.getKey()',
       tags: ['numpad', 'keypad', 'matrix', '4x4', 'buttons', 'membrane', 'input', 'sensor'],
       width: 120,
@@ -1673,7 +1807,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'builtin_comparator',
       name: 'Voltage Comparator (LM393)',
-      category: 'semiconductors',
+      category: 'logic',
       description: 'High-speed dual voltage comparator IC with internal reference threshold and open-collector output',
       tags: ['comparator', 'lm393', 'threshold', 'voltage', 'opamp', 'analog', 'semiconductor'],
       width: 80,
@@ -1868,7 +2002,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'builtin_dip_switch_4',
       name: '4-Bit DIP Switch Bank',
-      category: 'sensors',
+      category: 'inputs',
       description: '4-Channel SPST slide switch array with on-canvas toggle and optional internal pull-up resistors',
       tags: ['dip', 'switch', 'bank', 'spst', 'slideswitch', 'input', 'sensors'],
       width: 80,
@@ -1934,7 +2068,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'builtin_hbridge',
       name: 'H-Bridge Motor Driver (L298N)',
-      category: 'outputs',
+      category: 'passives',
       description: 'High-voltage high-current dual full-bridge motor driver module for bidirectional DC and stepper motor control',
       tags: ['hbridge', 'l298n', 'motor', 'driver', 'pwm', 'bidirectional', 'actuator', 'outputs'],
       width: 120,
@@ -1960,7 +2094,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'builtin_pnp',
       name: 'PNP Transistor (2N3906)',
-      category: 'semiconductors',
+      category: 'passives',
       description: 'General-purpose high-side PNP silicon epitaxial planar bipolar transistor',
       tags: ['transistor', 'pnp', '2n3906', 'bjt', 'switch', 'amplifier', 'semiconductors'],
       width: 80,
@@ -1984,7 +2118,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'builtin_pmos',
       name: 'P-Channel MOSFET',
-      category: 'semiconductors',
+      category: 'passives',
       description: 'Enhancement-mode P-channel power MOSFET for low-loss high-side load switching',
       tags: ['mosfet', 'pmos', 'p-channel', 'fet', 'switch', 'transistor', 'semiconductors'],
       width: 80,
@@ -2008,7 +2142,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'builtin_bridge_rectifier',
       name: 'Full-Wave Bridge Rectifier',
-      category: 'semiconductors',
+      category: 'power',
       description: 'Monolithic 4-diode full-wave AC-to-DC rectifier bridge package',
       tags: ['rectifier', 'bridge', 'diodes', 'ac-dc', 'power', 'semiconductors'],
       width: 80,
@@ -2053,7 +2187,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'builtin_optocoupler',
       name: 'Optocoupler Isolator (PC817)',
-      category: 'semiconductors',
+      category: 'passives',
       description: '4-pin galvanic isolator pairing an infrared GaAs LED with an NPN phototransistor',
       tags: ['optocoupler', 'pc817', 'optodiode', 'isolation', 'galvanic', 'semiconductors'],
       width: 80,
@@ -2100,7 +2234,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'builtin_joystick',
       name: '2-Axis Analog Joystick (KY-023)',
-      category: 'sensors',
+      category: 'inputs',
       description: 'Dual-potentiometer 2-axis gimbal thumbstick with integrated push-to-click momentary tactile switch',
       tags: ['joystick', 'ky023', 'thumbstick', 'analog', 'x-y', 'gimbal', 'controller', 'sensors'],
       width: 120,
@@ -2189,7 +2323,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'builtin_soil_moisture',
       name: 'Soil Moisture Sensor',
-      category: 'sensors',
+      category: 'inputs',
       description: 'Two-prong gold-plated conductive soil moisture fork probe with threshold comparator & dry/wet trigger invert',
       tags: ['soil', 'moisture', 'water', 'plant', 'irrigation', 'humidity', 'probe', 'sensors'],
       width: 80,
@@ -2289,7 +2423,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'builtin_rf_radio',
       name: 'Wireless RF Radio + Antenna',
-      category: 'mcu',
+      category: 'instruments',
       description: '433MHz / 2.4GHz wireless RF transceiver with whip antenna that bridges TX-to-RX signals across matching RF channels without wires',
       tags: ['rf', 'radio', 'wireless', 'antenna', '433mhz', 'transceiver', 'transmitter', 'receiver', 'mcu', 'sensors', 'outputs'],
       width: 80,
@@ -2347,7 +2481,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'builtin_ir_rx',
       name: 'Infrared (IR) Receiver (TSOP38238)',
-      category: 'sensors',
+      category: 'inputs',
       description: '38kHz Infrared receiver module triggered wirelessly by any active IR Transmitter LED on canvas or by the IR Remote cursor',
       tags: ['ir', 'infrared', 'receiver', 'tsop38238', 'remote', 'optical', 'sensors'],
       width: 80,
@@ -2371,7 +2505,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'builtin_hall_sensor',
       name: 'Hall-Effect Magnetic Sensor (A3144)',
-      category: 'sensors',
+      category: 'inputs',
       description: 'Solid-state magnetic flux sensor responding to the interactive Bar Magnet cursor with live mT Gauss readout',
       tags: ['hall', 'magnetic', 'magnet', 'a3144', 'gauss', 'flux', 'proximity', 'sensors'],
       width: 80,
@@ -2396,7 +2530,7 @@ class ComponentRegistryClass {
     this.registerComponent({
       id: 'builtin_vibration_sensor',
       name: 'Vibration / Knock Sensor (SW-420)',
-      category: 'sensors',
+      category: 'inputs',
       description: 'Piezo/spring-tube vibration and knock detector triggered by the Hammer cursor or direct on-canvas Tap button',
       tags: ['vibration', 'knock', 'shock', 'sw420', 'shake', 'seismic', 'tap', 'sensors'],
       width: 80,

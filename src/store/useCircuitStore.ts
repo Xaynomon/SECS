@@ -1574,32 +1574,70 @@ export const useCircuitStore = create<CircuitStoreState>((set, get) => {
         const subDtMs = deltaTimeMs > 0 ? deltaTimeMs / numSubSteps : 0;
         const subDtSec = Math.max(0.0005, (subDtMs * simulationSpeed) / 1000);
 
+        const getPinRawVoltageFromSpice = (
+          compId: string | undefined,
+          pinId: string | undefined,
+          sRes: ReturnType<typeof evaluateSpiceCircuit>
+        ): number | undefined => {
+          if (!compId || !pinId) return undefined;
+          const compRes = sRes.componentResults.get(compId);
+          if (!compRes?.pinVoltages) return undefined;
+          if (typeof compRes.pinVoltages[pinId] === 'number') {
+            return compRes.pinVoltages[pinId];
+          }
+          const lower = pinId.toLowerCase();
+          if (typeof compRes.pinVoltages[lower] === 'number') {
+            return compRes.pinVoltages[lower];
+          }
+          return undefined;
+        };
+
+        const getPinDcOffsetFromSpice = (
+          compId: string | undefined,
+          pinId: string | undefined,
+          sRes: ReturnType<typeof evaluateSpiceCircuit>
+        ): number => {
+          if (!compId || !pinId) return 0.0;
+          return getRectifierDcReferenceOffset(
+            { type: 'pin', compId, pinId },
+            updatedComps,
+            updatedWires,
+            (cId, pId) => getPinRawVoltageFromSpice(cId, pId, sRes)
+          );
+        };
+
         const getProbeVoltageFromSpice = (
           target: ProbeTarget | null | undefined,
           sRes: ReturnType<typeof evaluateSpiceCircuit>
         ): number => {
           if (!target) return 0.0;
-          let rawV = 0.0;
-          if (target.type === 'wire' && target.wireId) {
-            rawV = sRes.wireVoltages.get(target.wireId) ?? 0.0;
-          } else if (target.type === 'pin' && target.compId && target.pinId) {
-            const compRes = sRes.componentResults.get(target.compId);
-            if (compRes?.pinVoltages) {
-              if (typeof compRes.pinVoltages[target.pinId] === 'number') {
-                rawV = compRes.pinVoltages[target.pinId];
-              } else {
-                const lower = target.pinId.toLowerCase();
-                if (typeof compRes.pinVoltages[lower] === 'number') {
-                  rawV = compRes.pinVoltages[lower];
-                }
-              }
-            }
+          if (target.type === 'wire') {
+            const w = target.wireId
+              ? updatedWires.find((item) => item.id === target.wireId)
+              : undefined;
+            const fromCompId = w?.fromCompId ?? target.compId;
+            const fromPinId = w?.fromPinId ?? target.pinId;
+            const toCompId = w?.toCompId;
+            const toPinId = w?.toPinId;
+
+            const pinFromV = getPinRawVoltageFromSpice(fromCompId, fromPinId, sRes);
+            const pinToV = getPinRawVoltageFromSpice(toCompId, toPinId, sRes);
+            const rawV =
+              pinFromV ??
+              pinToV ??
+              (target.wireId ? sRes.wireVoltages.get(target.wireId) : undefined) ??
+              0.0;
+            const offset =
+              getPinDcOffsetFromSpice(fromCompId, fromPinId, sRes) ||
+              getPinDcOffsetFromSpice(toCompId, toPinId, sRes);
+            return rawV - offset;
           }
-          const offset = getRectifierDcReferenceOffset(target, updatedComps, updatedWires, (cId, pId) => {
-            const cr = sRes.componentResults.get(cId);
-            return cr?.pinVoltages?.[pId] ?? cr?.pinVoltages?.[pId.toLowerCase()];
-          });
-          return rawV - offset;
+          if (target.type === 'pin' && target.compId && target.pinId) {
+            const rawV = getPinRawVoltageFromSpice(target.compId, target.pinId, sRes) ?? 0.0;
+            const offset = getPinDcOffsetFromSpice(target.compId, target.pinId, sRes);
+            return rawV - offset;
+          }
+          return 0.0;
         };
 
         let spiceResult!: ReturnType<typeof evaluateSpiceCircuit>;
@@ -1630,34 +1668,28 @@ export const useCircuitStore = create<CircuitStoreState>((set, get) => {
         }
 
         updatedWires = updatedWires.map((w) => {
-          const rawV = spiceResult.wireVoltages.get(w.id) ?? 0;
+          const pinFromV = getPinRawVoltageFromSpice(w.fromCompId, w.fromPinId, spiceResult);
+          const pinToV = getPinRawVoltageFromSpice(w.toCompId, w.toPinId, spiceResult);
+          const rawV = pinFromV ?? pinToV ?? spiceResult.wireVoltages.get(w.id) ?? 0;
           const i = spiceResult.wireCurrents.get(w.id) ?? 0;
+          const dcOffset =
+            getPinDcOffsetFromSpice(w.fromCompId, w.fromPinId, spiceResult) ||
+            getPinDcOffsetFromSpice(w.toCompId, w.toPinId, spiceResult);
+          const v = rawV - dcOffset;
           if (isOffMode) {
             return {
               ...w,
               state: {
                 ...w.state,
-                voltage: rawV,
+                voltage: v,
                 current: i,
                 logicLevel: undefined,
                 flowDirection: 0,
               },
             };
           }
-          const dcOffset = getRectifierDcReferenceOffset(
-            { type: 'wire', wireId: w.id },
-            updatedComps,
-            updatedWires,
-            (cId, pId) => {
-              const cr = spiceResult.componentResults.get(cId);
-              return cr?.pinVoltages?.[pId] ?? cr?.pinVoltages?.[pId.toLowerCase()];
-            }
-          );
-          const v = rawV - dcOffset;
-          const fromRes = spiceResult.componentResults.get(w.fromCompId);
-          const toRes = spiceResult.componentResults.get(w.toCompId);
-          const vFrom = fromRes?.pinVoltages[w.fromPinId] ?? fromRes?.pinVoltages[w.fromPinId.toLowerCase()] ?? v;
-          const vTo = toRes?.pinVoltages[w.toPinId] ?? toRes?.pinVoltages[w.toPinId.toLowerCase()] ?? v;
+          const vFrom = pinFromV ?? v;
+          const vTo = pinToV ?? v;
           const fromComp = updatedComps.find((c) => c.id === w.fromCompId);
           const toComp = updatedComps.find((c) => c.id === w.toCompId);
           const flowDir = computeWireFlowDirection(
@@ -1886,12 +1918,27 @@ export const useCircuitStore = create<CircuitStoreState>((set, get) => {
       })),
 
     attachProbe: (instrument, channelId, target) => {
+      if (instrument === 'oscilloscope') {
+        clearScopeSampleBuffer();
+      }
       set((state) => {
+        const resolvedTarget: ProbeTarget | null =
+          target && target.type === 'wire' && target.wireId
+            ? (() => {
+                const matchedWire = state.wires.find((w) => w.id === target.wireId);
+                return {
+                  ...target,
+                  compId: matchedWire?.fromCompId ?? target.compId,
+                  pinId: matchedWire?.fromPinId ?? target.pinId,
+                };
+              })()
+            : target;
+
         if (instrument === 'multimeter') {
           return {
             multimeter: {
               ...state.multimeter,
-              [channelId === 'red' ? 'redProbe' : 'blackProbe']: target,
+              [channelId === 'red' ? 'redProbe' : 'blackProbe']: resolvedTarget,
             },
             activeProbePicker: null,
           };
@@ -1900,7 +1947,7 @@ export const useCircuitStore = create<CircuitStoreState>((set, get) => {
           return {
             oscilloscope: {
               ...state.oscilloscope,
-              [chKey]: { ...state.oscilloscope[chKey], target },
+              [chKey]: { ...state.oscilloscope[chKey], target: resolvedTarget },
             },
             activeProbePicker: null,
           };
@@ -1909,7 +1956,7 @@ export const useCircuitStore = create<CircuitStoreState>((set, get) => {
             logicAnalyzer: {
               ...state.logicAnalyzer,
               channels: state.logicAnalyzer.channels.map((ch) =>
-                ch.id === channelId ? { ...ch, target } : ch
+                ch.id === channelId ? { ...ch, target: resolvedTarget } : ch
               ),
             },
             activeProbePicker: null,

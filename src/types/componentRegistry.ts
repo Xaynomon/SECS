@@ -21,15 +21,17 @@ export interface ComponentPinDefinition {
 
 export type ComponentRegistryCategory =
   | 'power'
-  | 'passives'
-  | 'semiconductors'
-  | 'logic'
-  | 'mcu'
-  | 'sensors'
+  | 'inputs'
   | 'outputs'
+  | 'logic'
+  | 'passives'
+  | 'mcu'
+  | 'instruments'
+  // Legacy aliases retained for backwards compatibility
+  | 'semiconductors'
+  | 'sensors'
   | 'custom'
-  | 'annotations'
-  | 'instruments';
+  | 'annotations';
 
 export interface PropertySchemaItem {
   key: string;

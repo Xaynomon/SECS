@@ -32,7 +32,7 @@ import {
   Grid,
 } from 'lucide-react';
 import { useCircuitStore } from '../../store/useCircuitStore';
-import { COMPONENT_DEFINITIONS } from '../../constants/componentLibrary';
+import { COMPONENT_CATEGORIES, COMPONENT_DEFINITIONS } from '../../constants/componentLibrary';
 import { ComponentRegistry } from '../../registry/ComponentRegistry';
 import { WIRE_COLORS } from '../../constants/wireColors';
 import { ComponentThumbnail } from '../sidebar/ComponentThumbnail';
@@ -640,10 +640,79 @@ export const PropertiesInspector: React.FC = () => {
                 <option value="rectangle">Rectangle</option>
                 <option value="rounded">Rounded Box</option>
                 <option value="circle">Circle / Ellipse</option>
-                <option value="triangle">Triangle</option>
+                <option value="hollow-circle">Hollow Circle (Ring)</option>
+                <option value="semi-sphere">Semi-Sphere (Dome)</option>
+                <option value="triangle">Equilateral Triangle</option>
+                <option value="right-triangle">Right-Angle Triangle</option>
                 <option value="diamond">Diamond</option>
+                <option value="arrow">Block Arrow</option>
+                <option value="cloud">Cloud Shape</option>
               </select>
             </div>
+
+            {/* Orientation / 90° Rotation */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label
+                  className={`text-[11px] font-semibold ${
+                    isDark ? 'text-slate-400' : 'text-slate-600'
+                  }`}
+                >
+                  Orientation
+                </label>
+                <span className="text-[11px] font-mono text-indigo-400 font-semibold">
+                  {(((selectedComp.rotation || 0) % 360) + 360) % 360}°
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => rotateComponent(selectedComp.id, 90)}
+                className={`w-full flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded border text-xs font-medium transition ${
+                  isDark
+                    ? 'bg-slate-950 border-slate-700 hover:bg-slate-800 hover:border-indigo-500/60 text-slate-200'
+                    : 'bg-white border-slate-300 hover:bg-indigo-50 hover:border-indigo-400 text-slate-700'
+                }`}
+              >
+                <RotateCw className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Rotate 90° (R)</span>
+              </button>
+            </div>
+
+            {/* Hollow Circle Inner Ring Ratio */}
+            {(selectedComp.properties.shapeType || 'rectangle') === 'hollow-circle' && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label
+                    className={`text-[11px] font-semibold ${
+                      isDark ? 'text-slate-400' : 'text-slate-600'
+                    }`}
+                  >
+                    Inner Ring Ratio
+                  </label>
+                  <span className="text-[11px] font-mono text-slate-400">
+                    {Math.round(
+                      ((selectedComp.properties.innerRadiusRatio ?? 0.55) as number) * 100
+                    )}
+                    %
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0.2}
+                  max={0.85}
+                  step={0.05}
+                  value={selectedComp.properties.innerRadiusRatio ?? 0.55}
+                  onChange={(e) =>
+                    updateComponentProperty(
+                      selectedComp.id,
+                      'innerRadiusRatio',
+                      Number(e.target.value)
+                    )
+                  }
+                  className="w-full accent-indigo-500 cursor-pointer"
+                />
+              </div>
+            )}
 
             {/* Center Label */}
             <div>
@@ -903,7 +972,8 @@ export const PropertiesInspector: React.FC = () => {
               <ComponentThumbnail definition={compDef as any} theme={theme} />
               <div className="min-w-0 flex-1">
                 <span className="text-[10px] uppercase font-bold tracking-wider text-sky-500">
-                  {compDef.category}
+                  {COMPONENT_CATEGORIES.find((cat) => cat.id === compDef.category)?.label ||
+                    compDef.category}
                 </span>
                 <div
                   className={`font-bold text-sm truncate ${

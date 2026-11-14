@@ -193,17 +193,179 @@ export function getCircuitBoundingBox(
   };
 }
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+function getTextBoxFontSizePx(fontSize?: string): number {
+  switch (fontSize) {
+    case 'sm':
+      return 12;
+    case 'lg':
+      return 18;
+    case 'xl':
+      return 22;
+    case 'md':
+    default:
+      return 14;
+  }
+}
+
+function getTextBoxExportStyles(
+  properties: Record<string, any>,
+  theme: 'dark' | 'light'
+): { bg: string; textColor: string; borderColor: string } {
+  const isDark = theme === 'dark';
+  const bgStyle = properties.bgStyle || 'sticky-yellow';
+  let bg = 'transparent';
+  let textColor = properties.color || (isDark ? '#e2e8f0' : '#1e293b');
+  let borderColor = isDark ? '#475569' : '#cbd5e1';
+
+  switch (bgStyle) {
+    case 'sticky-yellow':
+      bg = isDark ? '#854d0e' : '#fef08a';
+      textColor = isDark ? '#fef08a' : '#713f12';
+      borderColor = isDark ? '#ca8a04' : '#facc15';
+      break;
+    case 'sticky-blue':
+      bg = isDark ? '#1e3a8a' : '#e0f2fe';
+      textColor = isDark ? '#bfdbfe' : '#0369a1';
+      borderColor = isDark ? '#2563eb' : '#38bdf8';
+      break;
+    case 'sticky-green':
+      bg = isDark ? '#14532d' : '#dcfce7';
+      textColor = isDark ? '#bbf7d0' : '#15803d';
+      borderColor = isDark ? '#16a34a' : '#4ade80';
+      break;
+    case 'card':
+      bg = isDark ? '#1e293b' : '#ffffff';
+      textColor = isDark ? '#f8fafc' : '#0f172a';
+      borderColor = isDark ? '#334155' : '#e2e8f0';
+      break;
+    case 'transparent':
+    default:
+      bg = 'transparent';
+      break;
+  }
+
+  return { bg, textColor, borderColor };
+}
+
+function wrapTextBoxLines(text: string, maxCharsPerLine: number): string[] {
+  const rawLines = text.split(/\r?\n/);
+  const result: string[] = [];
+
+  for (const raw of rawLines) {
+    if (!raw) {
+      result.push('');
+      continue;
+    }
+    if (raw.length <= maxCharsPerLine) {
+      result.push(raw);
+      continue;
+    }
+
+    const words = raw.split(/(\s+)/);
+    let current = '';
+    for (const part of words) {
+      if ((current + part).length <= maxCharsPerLine) {
+        current += part;
+      } else if (current.trimEnd()) {
+        result.push(current.trimEnd());
+        current = part.trimStart();
+      } else {
+        let rest = current + part;
+        while (rest.length > maxCharsPerLine) {
+          result.push(rest.slice(0, maxCharsPerLine));
+          rest = rest.slice(maxCharsPerLine);
+        }
+        current = rest;
+      }
+    }
+    if (current.trimEnd()) {
+      result.push(current.trimEnd());
+    }
+  }
+
+  return result.length > 0 ? result : [''];
+}
+
+function buildNativeSvgTextBoxGroup(
+  doc: Document,
+  comp: CircuitComponent,
+  theme: 'dark' | 'light'
+): SVGGElement {
+  const p = comp.properties || {};
+  const boxWidth = Math.max(80, Number(p.boxWidth ?? p.width) || 160);
+  const boxHeight = Math.max(40, Number(p.boxHeight ?? p.height) || 80);
+  const fontSizePx = getTextBoxFontSizePx(p.fontSize);
+  const fontWeight = String(p.fontWeight || 'normal');
+  const fontStyle = String(p.fontStyle || 'normal');
+  const borderStyle = String(p.borderStyle || 'dashed');
+  const { bg, textColor, borderColor } = getTextBoxExportStyles(p, theme);
+
+  const g = doc.createElementNS(SVG_NS, 'g');
+  g.setAttribute('transform', `translate(${comp.x}, ${comp.y})`);
+
+  const rect = doc.createElementNS(SVG_NS, 'rect');
+  rect.setAttribute('x', '0');
+  rect.setAttribute('y', '0');
+  rect.setAttribute('width', `${boxWidth}`);
+  rect.setAttribute('height', `${boxHeight}`);
+  rect.setAttribute('rx', '6');
+  rect.setAttribute('fill', bg === 'transparent' ? 'none' : bg);
+  rect.setAttribute('stroke', borderStyle === 'none' ? 'none' : borderColor);
+  rect.setAttribute('stroke-width', borderStyle === 'none' ? '0' : '1.5');
+  if (borderStyle === 'dashed') {
+    rect.setAttribute('stroke-dasharray', '5 3');
+  }
+  g.appendChild(rect);
+
+  const rawText =
+    typeof p.text === 'string' && p.text.length > 0 ? p.text : 'Double-click to add note...';
+  const maxChars = Math.max(8, Math.floor((boxWidth - 20) / (fontSizePx * 0.58)));
+  const lines = wrapTextBoxLines(rawText, maxChars);
+  const lineHeight = Math.round(fontSizePx * 1.35);
+  const maxVisibleLines = Math.max(1, Math.floor((boxHeight - 16) / lineHeight));
+  const clippedLines = lines.slice(0, maxVisibleLines);
+
+  const textEl = doc.createElementNS(SVG_NS, 'text');
+  textEl.setAttribute('x', '10');
+  textEl.setAttribute('y', `${10 + fontSizePx}`);
+  textEl.setAttribute('fill', textColor);
+  textEl.setAttribute(
+    'font-family',
+    'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+  );
+  textEl.setAttribute('font-size', `${fontSizePx}`);
+  textEl.setAttribute('font-weight', fontWeight);
+  textEl.setAttribute('font-style', fontStyle);
+
+  clippedLines.forEach((line, idx) => {
+    const tspan = doc.createElementNS(SVG_NS, 'tspan');
+    tspan.setAttribute('x', '10');
+    tspan.setAttribute('dy', idx === 0 ? '0' : `${lineHeight}`);
+    // Preserve blank lines while keeping valid escaped XML text via DOM textContent
+    tspan.textContent = line.length > 0 ? line : '\u00A0';
+    textEl.appendChild(tspan);
+  });
+
+  g.appendChild(textEl);
+  return g;
+}
+
 /**
  * Clones and normalizes the live canvas SVG into a standalone, valid XML document
  * safe for both SVG vector download and offscreen HTMLImageElement PNG rasterization.
  */
-function prepareClonedSvgForExport(
+export function prepareClonedSvgForExport(
   svgEl: SVGSVGElement,
   bbox: { minX: number; minY: number; width: number; height: number },
-  bgColor: string
+  bgColor: string,
+  includeBackground: boolean = true,
+  components: CircuitComponent[] = [],
+  theme: 'dark' | 'light' = 'dark'
 ): { clone: SVGSVGElement; serialized: string } {
   const clone = svgEl.cloneNode(true) as SVGSVGElement;
-  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  clone.setAttribute('xmlns', SVG_NS);
   clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
   clone.setAttribute('viewBox', `${bbox.minX} ${bbox.minY} ${bbox.width} ${bbox.height}`);
   clone.setAttribute('width', `${bbox.width}`);
@@ -216,20 +378,34 @@ function prepareClonedSvgForExport(
     worldGroup.removeAttribute('transform');
   }
 
-  // Normalize grid patterns & background grid rects to fill the exported viewBox cleanly
-  const patterns = clone.querySelectorAll('pattern');
-  patterns.forEach((pat) => {
-    pat.setAttribute('x', '0');
-    pat.setAttribute('y', '0');
-  });
+  if (includeBackground) {
+    // Normalize grid patterns & background grid rects to fill the exported viewBox cleanly
+    const patterns = clone.querySelectorAll('pattern');
+    patterns.forEach((pat) => {
+      pat.setAttribute('x', '0');
+      pat.setAttribute('y', '0');
+    });
 
-  const bgGridRects = clone.querySelectorAll('rect[width="100%"]');
-  bgGridRects.forEach((r) => {
-    r.setAttribute('x', `${bbox.minX}`);
-    r.setAttribute('y', `${bbox.minY}`);
-    r.setAttribute('width', `${bbox.width}`);
-    r.setAttribute('height', `${bbox.height}`);
-  });
+    const bgGridRects = clone.querySelectorAll('rect[width="100%"]');
+    bgGridRects.forEach((r) => {
+      r.setAttribute('x', `${bbox.minX}`);
+      r.setAttribute('y', `${bbox.minY}`);
+      r.setAttribute('width', `${bbox.width}`);
+      r.setAttribute('height', `${bbox.height}`);
+    });
+  } else {
+    // Strip grid background rects, grid patterns, and origin crosshair axes for transparent exports
+    clone.querySelectorAll('rect[width="100%"]').forEach((r) => r.remove());
+    clone.querySelectorAll('pattern#grid-minor, pattern#grid-major').forEach((p) => p.remove());
+    clone
+      .querySelectorAll(
+        'line[x1="0"][y1="-20"][x2="0"][y2="20"], line[x1="-20"][y1="0"][x2="20"][y2="0"]'
+      )
+      .forEach((l) => l.remove());
+    if (clone.style) {
+      clone.style.background = 'transparent';
+    }
+  }
 
   // Convert CSS-function filter attributes (`drop-shadow(...)`) to inline style so strict SVG XML parsers succeed
   const filteredEls = clone.querySelectorAll('[filter]');
@@ -241,24 +417,36 @@ function prepareClonedSvgForExport(
     }
   });
 
-  // Ensure XHTML namespace inside any foreignObject so SVG-in-Image doesn't reject HTML nodes
+  // Remove HTML <foreignObject> Text Box subtrees (which taint <canvas> on PNG export)
   const foreignObjects = clone.querySelectorAll('foreignObject');
   foreignObjects.forEach((fo) => {
-    Array.from(fo.children).forEach((child) => {
-      if (!child.getAttribute('xmlns')) {
-        child.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
-      }
-    });
+    const wrapper = fo.closest('g[transform^="translate"]');
+    if (wrapper && wrapper !== worldGroup) {
+      wrapper.remove();
+    } else {
+      fo.remove();
+    }
   });
+  clone.querySelectorAll('foreignObject').forEach((fo) => fo.remove());
 
-  // Prepend opaque background rect
-  const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-  bgRect.setAttribute('x', `${bbox.minX}`);
-  bgRect.setAttribute('y', `${bbox.minY}`);
-  bgRect.setAttribute('width', `${bbox.width}`);
-  bgRect.setAttribute('height', `${bbox.height}`);
-  bgRect.setAttribute('fill', bgColor);
-  clone.insertBefore(bgRect, clone.firstChild);
+  // Re-render every Text Box as pure native SVG <rect> + <text>/<tspan> nodes
+  const doc = clone.ownerDocument || document;
+  const targetParent = worldGroup || clone;
+  const textBoxes = components.filter((c) => c.type === 'textbox');
+  for (const tb of textBoxes) {
+    targetParent.appendChild(buildNativeSvgTextBoxGroup(doc, tb, theme));
+  }
+
+  if (includeBackground) {
+    // Prepend opaque background rect
+    const bgRect = doc.createElementNS(SVG_NS, 'rect');
+    bgRect.setAttribute('x', `${bbox.minX}`);
+    bgRect.setAttribute('y', `${bbox.minY}`);
+    bgRect.setAttribute('width', `${bbox.width}`);
+    bgRect.setAttribute('height', `${bbox.height}`);
+    bgRect.setAttribute('fill', bgColor);
+    clone.insertBefore(bgRect, clone.firstChild);
+  }
 
   const serializer = new XMLSerializer();
   const serialized = serializer.serializeToString(clone);
@@ -272,7 +460,8 @@ export function exportCircuitSvg(
   components: CircuitComponent[],
   wires: CircuitWire[],
   theme: 'dark' | 'light',
-  projectName?: string
+  projectName?: string,
+  includeBackground: boolean = true
 ) {
   const svgEl = document.querySelector('main svg') as SVGSVGElement | null;
   if (!svgEl) return;
@@ -280,7 +469,14 @@ export function exportCircuitSvg(
   const isDark = theme === 'dark';
   const bgColor = isDark ? '#0b1120' : '#f8fafc';
   const bbox = getCircuitBoundingBox(components, wires);
-  const { serialized } = prepareClonedSvgForExport(svgEl, bbox, bgColor);
+  const { serialized } = prepareClonedSvgForExport(
+    svgEl,
+    bbox,
+    bgColor,
+    includeBackground,
+    components,
+    theme
+  );
 
   const source = serialized.startsWith('<?xml')
     ? serialized
@@ -291,13 +487,14 @@ export function exportCircuitSvg(
 }
 
 /**
- * Exports current circuit as high-resolution PNG
+ * Exports current circuit as high-resolution PNG (with optional transparent background)
  */
 export function exportCircuitPng(
   components: CircuitComponent[],
   wires: CircuitWire[],
   theme: 'dark' | 'light',
-  projectName?: string
+  projectName?: string,
+  includeBackground: boolean = true
 ) {
   const svgEl = document.querySelector('main svg') as SVGSVGElement | null;
   if (!svgEl) return;
@@ -305,7 +502,14 @@ export function exportCircuitPng(
   const isDark = theme === 'dark';
   const bgColor = isDark ? '#0b1120' : '#f8fafc';
   const bbox = getCircuitBoundingBox(components, wires);
-  const { serialized } = prepareClonedSvgForExport(svgEl, bbox, bgColor);
+  const { serialized } = prepareClonedSvgForExport(
+    svgEl,
+    bbox,
+    bgColor,
+    includeBackground,
+    components,
+    theme
+  );
   const filename = `${sanitizeExportBaseName(projectName)}.png`;
 
   const img = new Image();
@@ -335,8 +539,11 @@ export function exportCircuitPng(
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    ctx.fillStyle = bgColor;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (includeBackground) {
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
     canvas.toBlob((blob) => {

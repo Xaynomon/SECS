@@ -1,6 +1,6 @@
 # SECS: Standalone Electronic Circuit Simulator ⚡
 
-SECS is a high-performance, standalone electronic CAD and circuit simulation suite built with React, TypeScript, and Vite. It bridges the gap between simple logic simulators and steep, netlist-heavy SPICE packages.
+SECS is a high-performance, standalone electronic CAD and circuit simulation suite built with React, TypeScript, and Vite. It bridges the gap between simple logic simulators and steep, netlist-heavy SPICE packages. This project is currently in development for Windows OS, and will come with a version which allow user to run using default browser. Expect more updates in the future.
 
 ## 🚀 Live Demo & Key Features
 - **Dual-Engine Real-Time Simulation:** Real-time 4-state digital logic propagation alongside an iterative Modified Nodal Analysis (MNA) SPICE solver.
@@ -56,8 +56,9 @@ Make sure you have Node.js installed.
 <img width="1863" height="1030" alt="Screenshot 2026-11-14 164953" src="https://github.com/user-attachments/assets/63eb602a-5fc4-426d-aacd-15d70faacfa8" />
 <img width="1865" height="1030" alt="Screenshot 2026-11-14 164811" src="https://github.com/user-attachments/assets/9d049290-c427-4760-a9f8-df52d297f547" />
 <img width="1864" height="1031" alt="Screenshot 2026-11-14 164541" src="https://github.com/user-attachments/assets/1545cd40-ec33-4fea-910f-f9a8df161385" />
-<img width="1865" height="1079" alt="Screenshot 2026-11-14 163938" src="https://github.com/user-attachments/assets/8821682b-6659-46a3-a0e1-9276a09b25fd" />
-<img width="1866" height="1079" alt="Screenshot 2026-11-14 163806" src="https://github.com/user-attachments/assets/2e4ed5c2-8423-4ca2-abfa-b9fbaf6c7829" />
+<img width="1865" height="1030" alt="Screenshot 2026-11-14 163938" src="https://github.com/user-attachments/assets/403eae62-05ec-48e6-ad46-9d32c85217f2" />
+<img width="1866" height="1030" alt="Screenshot 2026-11-14 163806" src="https://github.com/user-attachments/assets/7cda2d4e-aa9d-477f-9468-6c80ec130921" />
+
 
 
 
